@@ -1,9 +1,3 @@
-type
-  Addon* = object
-    id: string
-    site: string
-    version: string
-
 import std/asyncdispatch
 import std/httpclient
 import std/json
@@ -14,26 +8,39 @@ import std/os
 import std/parseopt
 
 proc displayHelp() =
+  echo "  -u, --update                Update installed addons"
   echo "  -i, --install <addon id>    Install an addon"
   echo "  -a, --add <addon id>        Same as --install"
-  echo "  -u, --uninstall <addon id>  Uninstall an addon"
-  echo "  -r, --remove <addon id>     Same as --uninstall"
-  echo "  -l, --list                  Display installed addons"
+  echo "  -r, --remove <addon id>     Remove an installed addon"
+  echo "  -l, --list                  List installed addons"
+  echo "      --pin <addon id>        Pin an addon at the current version, do not update"
+  echo "      --unpin <addon id>      Unpin an addon, resume updates"
+  echo "      --restore <addon id>    Restore addon to last backed up version and pin it"
   quit()
 
-var id: string
-var opt = initOptParser(commandLineParams())
+var opt = initOptParser(commandLineParams(), 
+                        shortNoVal = {'h', 'l', 'u'}, 
+                        longNoVal = @["help", "list", "update"])
 
 for kind, key, val in opt.getopt():
   case kind
   of cmdShortOption, cmdLongOption:
     case key:
       of "h", "help": displayHelp()
-      of "a", "i", "add", "install": echo "install"
-      of "u", "r", "uninstall", "remove": echo "uninstall"
-      of "l", "list": echo "list"
+      of "a", "i", "add", "install": echo "TODO"
+      of "u", "r", "uninstall", "remove": echo "TODO"
+      of "l", "list": echo "TODO"
+      of "pin": echo "TODO"
+      of "unpin": echo "TODO"
+      of "restore": echo "TODO"
       else: displayHelp()
   else: displayHelp()
+
+type
+  Addon* = object
+    id: string
+    site: string
+    version: string
 
 let addon = Addon(
   id: "Stanzilla/AdvancedInterfaceOptions", 
