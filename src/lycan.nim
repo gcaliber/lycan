@@ -7,6 +7,14 @@ import std/strutils
 import std/os
 import std/parseopt
 
+# TODO
+# add github support
+# add tukui/elvui support
+# add gitlab support
+# add wowinterface support
+# add wago.io support with API key (requires wago.io patreon account)
+# add classic/wotlk/ptr support
+
 proc displayHelp() =
   echo "  -u, --update                Update installed addons"
   echo "  -i, --install <addon id>    Install an addon"
