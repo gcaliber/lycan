@@ -1,14 +1,1 @@
-{
-  "addons": [
-    {
-      "id": "Stanzilla/AdvancedInterfaceOptions", 
-      "source": "github",
-      "version": "1.7.2"
-    },
-    {
-      "id": "tullamods/OmniCC", 
-      "source": "github",
-      "version": ""
-    }
-  ]
-}
+[{"id":"Stanzilla/AdvancedInterfaceOptions","source":"github","version":"1.7.2","directories":["/home/mike/projects/lycan/test/addons/AdvancedInterfaceOptions"]},{"id":"tullamods/Bagnon","source":"github","version":"7.2.3","directories":["/home/mike/projects/lycan/test/addons/Bagnon"]}]
