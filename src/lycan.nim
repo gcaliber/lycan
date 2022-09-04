@@ -174,7 +174,8 @@ proc parseAddonUrl(arg: string): (string, AddonSource) =
       return (matches[1], github)
     of "gitlab":
       # gitlab can have arbitrarily deep project nesting unlike github
-      # should probably strip the url first, then pattern match the rest of the string
+      # should probably strip the url first, then pattern match the rest of the string seperately
+      # based on the source, this will make for much simpler regex for anyone reading the code
       # https://gitlab.com/siebens/legacy/autoactioncam
       # https://gitlab.com/api/v4/projects/siebens%2Flegacy%2Fautoactioncam/releases
       return (matches[1], gitlab)
