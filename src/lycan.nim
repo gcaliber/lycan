@@ -28,22 +28,6 @@ let config = parseJson(readFile("test/lycan.json"))
 let flavor = "retail"
 let tempDir = getTempDir()
 
-proc parseAddonUrl(arg: string): (string, AddonSource) =
-  var matches: array[4, string]
-  let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.\w*)\.(?:com|org)\/(?:(?:(.\w*\/(.\w*-?\w*)(?:\.html)?))|(?:download\.php\?ui=(.*)))"
-  discard find(arg, pattern, matches, 0, len(arg))
-  case matches[0]
-    of "github":
-      return (matches[1], github)
-    of "gitlab":
-      return (matches[1], gitlab)
-    of "tukui":
-      return (matches[3], tukui)
-    of "wowinterface":
-      return (matches[2], wowint)
-    else:
-      echo "Unable to determine the addon source."
-      quit()
 
 proc loadInstalledAddons(): seq[Addon] =
   let addonsJson = parseJson(readFile("test/lycan_addons.json"))
@@ -53,11 +37,12 @@ proc loadInstalledAddons(): seq[Addon] =
   return addons
 
 var addons: seq[Addon] = loadInstalledAddons()
-# var addons: seq[Addon]
+
 
 proc getLatestJson(url: string): Future[string] {.async.} =
   var client = newAsyncHttpClient()
   return await client.getContent(url)
+
 
 proc downloadAsset(url: string, filename: string) {.async.} =
   var client = newAsyncHttpClient()
@@ -66,12 +51,14 @@ proc downloadAsset(url: string, filename: string) {.async.} =
   write(file, waitFor response.body)
   close(file)
 
+
 proc unzip(filename: string, extractDir: string) =
   var z: ZipArchive
   if not z.open(filename):
     echo fmt"Opening {filename} failed"
     return
   z.extractAll(extractDir)
+
 
 proc getAddonDirs(root: string): seq[string] =
   var addonDirs: seq[string] = @[root]
@@ -174,6 +161,23 @@ proc installGithub(project: string) =
   addons.add(newAddon)
   writeInstalledAddons()
 
+proc parseAddonUrl(arg: string): (string, AddonSource) =
+  var matches: array[4, string]
+  let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.\w*)\.(?:com|org)\/(?:(?:(.\w*\/(.\w*-?\w*)(?:\.html)?))|(?:download\.php\?ui=(.*)))"
+  discard find(arg, pattern, matches, 0, len(arg))
+  case matches[0]
+    of "github":
+      return (matches[1], github)
+    of "gitlab":
+      return (matches[1], gitlab)
+    of "tukui":
+      return (matches[3], tukui)
+    of "wowinterface":
+      return (matches[2], wowint)
+    else:
+      echo "Unable to determine the addon source."
+      quit()
+
 proc installAddon(arg: string) =
   let (id, source) = parseAddonUrl(arg)
   case source
@@ -181,6 +185,23 @@ proc installAddon(arg: string) =
       installGithub(id)
     else:
       quit()
+
+proc removeAddon(arg: int16) = 
+  for addon in addons:
+    if addon.id == arg:
+      for dir in addon.directories:
+        removeDir(joinPath(config["retail"]["dir"].getStr(), dir))
+      addons.delete(addons.find(addon))
+      writeInstalledAddons()
+      return
+  echo &"Error: No addon with id \"{arg}\""
+
+proc removeAddon(arg: string) = 
+  for addon in addons:
+    if addon.project == arg:
+      removeAddon(addon.id)
+      return
+  echo &"Error: \"{arg}\" not found"
 
 proc displayHelp() =
   echo "  -u, --update                 Update installed addons"
@@ -199,13 +220,15 @@ var opt = initOptParser(commandLineParams(),
 
 type
   Command = enum
-    install, remove, update, list, pin, unpin, restore
+    install, remove, update, list, pin, unpin, restore, none
 
-var command: Command
+var command: Command = none
 var target: string = ""
 for kind, key, val in opt.getopt():
   case kind
   of cmdShortOption, cmdLongOption:
+    # echo "key ", key
+    # echo "val ", "'", val, "'"
     if val == "":
       case key:
         of "h", "help": displayHelp()
@@ -223,16 +246,22 @@ for kind, key, val in opt.getopt():
         of "restore": command = restore
         else: displayHelp()
   of cmdArgument:
+    # echo "cmd ", "'", key, "'"
     target = key
   else: displayHelp()
 case command
   of install: installAddon(target)
-  of remove: echo "TODO" #removeAddon(target)
+  of remove:
+    if len(target) > 4:
+      removeAddon(target)
+    else:
+      removeAddon(int16(parseInt(target)))
   of update: echo "TODO"
   of list: echo "TODO"
   of pin: echo "TODO"
   of unpin: echo "TODO"
   of restore: echo "TODO"
+  of none: echo "TODO" #if no args at all just update everything
 
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
 # addons folder is <WoW>\_retail_\Interface\AddOns
