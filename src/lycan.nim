@@ -165,10 +165,18 @@ proc parseAddonUrl(arg: string): (string, AddonSource) =
   var matches: array[4, string]
   let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.\w*)\.(?:com|org)\/(?:(?:(.\w*\/(.\w*-?\w*)(?:\.html)?))|(?:download\.php\?ui=(.*)))"
   discard find(arg, pattern, matches, 0, len(arg))
+  # match[0] is the base url we match against
+  # match[1] is the github and gitlab project name
+  # match[2] is the wowinterface project name
+  # match[3] is the tukui project name
   case matches[0]
     of "github":
       return (matches[1], github)
     of "gitlab":
+      # gitlab can have arbitrarily deep project nesting unlike github
+      # should probably strip the url first, then pattern match the rest of the string
+      # https://gitlab.com/siebens/legacy/autoactioncam
+      # https://gitlab.com/api/v4/projects/siebens%2Flegacy%2Fautoactioncam/releases
       return (matches[1], gitlab)
     of "tukui":
       return (matches[3], tukui)
@@ -190,11 +198,11 @@ proc removeAddon(arg: int16) =
   for addon in addons:
     if addon.id == arg:
       for dir in addon.directories:
-        removeDir(joinPath(config["retail"]["dir"].getStr(), dir))
+        removeDir(joinPath(config[flavor]["dir"].getStr(), dir))
       addons.delete(addons.find(addon))
       writeInstalledAddons()
       return
-  echo &"Error: No addon with id \"{arg}\""
+  echo &"Error: No installed addon with id \"{arg}\""
 
 proc removeAddon(arg: string) = 
   for addon in addons:
