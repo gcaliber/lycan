@@ -12,24 +12,14 @@ import std/re
 
 import zip/zipfiles
 
-proc displayHelp() =
-  echo "  -u, --update                Update installed addons"
-  echo "  -i, --install <addon id>    Install an addon"
-  echo "  -a, --add <addon id>        Same as --install"
-  echo "  -r, --remove <addon id>     Remove an installed addon"
-  echo "  -l, --list                  List installed addons"
-  echo "      --pin <addon id>        Pin an addon at the current version, do not update"
-  echo "      --unpin <addon id>      Unpin an addon, resume updates"
-  echo "      --restore <addon id>    Restore addon to last backed up version and pin it"
-  quit()
-
 type
   AddonSource = enum
     github, gitlab, tukui, wowint, unknown
 
 type
   Addon* = object
-    id: string
+    id: int16
+    project: string
     source: AddonSource
     version: string
     directories: seq[string]
@@ -83,27 +73,36 @@ proc unzip(filename: string, extractDir: string) =
     return
   z.extractAll(extractDir)
 
-
-proc getAddonDirs(path: string): seq[string] =
-  var subDirs: seq[string] = @[path]
-  var dirs: seq[string] = @[]
-  while len(dirs) == 0 and len(subDirs) > 0:
-    let parent = subDirs[0]
-    for kind, path in walkDir(parent):
+proc getAddonDirs(root: string): seq[string] =
+  var addonDirs: seq[string] = @[root]
+  var n = 0
+  var tocPaths: seq[(string, string)]
+  while len(addonDirs) != 0:
+    var current = addonDirs[n]
+    for kind, path in walkDir(current):
       if kind == pcFile:
-        let (_, name, ext) = splitFile(path)
+        let (dir, name, ext) = splitFile(path)
         if ext == ".toc":
-          let (parentHead, parentTail) = splitPath(parent)
-          if name == parentTail:
-            return subDirs
-          else:
-            return @[joinPath(parentHead, name)]
-    subDirs = @[]
-    for kind, path in walkDir(parent):
-      if kind == pcDir:
-        subDirs.add(path)
-    # TODO: Error Handling, should raise an error instead of returning empty sequence
-  return @[]
+          if name == lastPathPart(dir):
+            return addonDirs
+          tocPaths.add((dir, name))
+    n += 1
+    if n >= len(addonDirs):
+      n = 0
+      addonDirs = @[]
+      for kind, path in walkDir(current):
+        if kind == pcDir:
+          addonDirs.add(path)
+  # we did not find a toc file with a matching directory name
+  # so we need to rename the directory based on the best toc file found
+  for (dir, name) in tocPaths:
+    let lc = name.toLower()
+    if not (lc.contains("tbc") or lc.contains("wtolk") or lc.contains("bcc") or lc.contains("classic")):
+      let (base, _) = splitPath(dir)
+      let newPath = joinPath(base, name)
+      moveDir(dir, newPath)
+      return @[newPath]
+
 
 proc writeInstalledAddons() =
   let options = ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef)
@@ -112,8 +111,8 @@ proc writeInstalledAddons() =
   write(file, addonsJson)
   close(file)
 
-proc installGithub(id: string) =
-  let latestUrl = fmt"https://api.github.com/repos/{id}/releases/latest"
+proc installGithub(project: string) =
+  let latestUrl = fmt"https://api.github.com/repos/{project}/releases/latest"
   let latestJson = parseJson(waitFor getLatestJson(latestUrl))
   
   let assets = latestJson["assets"]
@@ -129,7 +128,7 @@ proc installGithub(id: string) =
         downloadUrl = asset["browser_download_url"].getStr()
         break
   else:
-    name = hash(id).intToStr() & ".zip"
+    name = hash(project).intToStr() & ".zip"
     downloadUrl = latestJson["zipball_url"].getStr()
     
   let filename = joinPath(tempDir, name)
@@ -144,19 +143,34 @@ proc installGithub(id: string) =
     let (_, name) = splitPath(dir)
     let destinationDir = joinPath(config[flavor]["dir"].getStr(), name)
     moveDir(dir, destinationDir)
-    addonsDirs.add(destinationDir)
+    addonsDirs.add(name)
   
   var newAddon: Addon
-  newAddon.id = id
+  newAddon.id = -1
+  newAddon.project = project
   newAddon.source = github
   let v = latestJson["name"].getStr()
   newAddon.version = if v != "": v else: latestJson["tag_name"].getStr()
   newAddon.directories = addonsDirs
   
   for addon in addons:
-    if addon.id == id:
+    if addon.project == project:
+      newAddon.id = addon.id
       addons.delete(addons.find(addon))
       break
+  
+  var ids: set[int16]
+  if newAddon.id == -1:
+    for addon in addons:
+      incl(ids, addon.id)
+  
+  var id: int16 = 1
+  while newAddon.id == -1:
+    if id in ids:
+      id += 1
+    else:
+      newAddon.id = id
+
   addons.add(newAddon)
   writeInstalledAddons()
 
@@ -168,24 +182,57 @@ proc installAddon(arg: string) =
     else:
       quit()
 
+proc displayHelp() =
+  echo "  -u, --update                 Update installed addons"
+  echo "  -i, --install <arg>          Install an addon where <arg> is the url"
+  echo "  -a, --add <arg>              Same as --install"
+  echo "  -r, --remove <arg>           Remove an installed addon where <arg> is the id# or project"
+  echo "  -l, --list                   List installed addons"
+  echo "      --pin <addon id#>        Pin an addon at the current version, do not update"
+  echo "      --unpin <addon id#>      Unpin an addon, resume updates"
+  echo "      --restore <addon id#>    Restore addon to last backed up version and pin it"
+  quit()
+
 var opt = initOptParser(commandLineParams(), 
-                        shortNoVal = {'h', 'l', 'u'}, 
+                        shortNoVal = {'h', 'l', 'u', 'i', 'a'}, 
                         longNoVal = @["help", "list", "update"])
 
+type
+  Command = enum
+    install, remove, update, list, pin, unpin, restore
+
+var command: Command
+var target: string = ""
 for kind, key, val in opt.getopt():
   case kind
   of cmdShortOption, cmdLongOption:
-    case key:
-      of "h", "help": displayHelp()
-      of "a", "i", "add", "install":
-        installAddon(val)
-      of "u", "r", "uninstall", "remove": echo "TODO"
-      of "l", "list": echo "TODO"
-      of "pin": echo "TODO"
-      of "unpin": echo "TODO"
-      of "restore": echo "TODO"
-      else: displayHelp()
+    if val == "":
+      case key:
+        of "h", "help": displayHelp()
+        of "a", "i": command = install
+        of "r": command = remove
+        of "l", "list": command = list
+        else: displayHelp()
+    else:
+      target = val
+      case key:
+        of "add", "install": command = install
+        of "remove": command = remove
+        of "pin": command = pin
+        of "unpin": command = unpin
+        of "restore": command = restore
+        else: displayHelp()
+  of cmdArgument:
+    target = key
   else: displayHelp()
+case command
+  of install: installAddon(target)
+  of remove: echo "TODO" #removeAddon(target)
+  of update: echo "TODO"
+  of list: echo "TODO"
+  of pin: echo "TODO"
+  of unpin: echo "TODO"
+  of restore: echo "TODO"
 
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
 # addons folder is <WoW>\_retail_\Interface\AddOns
