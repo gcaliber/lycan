@@ -2,12 +2,12 @@
   "addons": [
     {
       "id": "Stanzilla/AdvancedInterfaceOptions", 
-      "site": "github",
+      "source": "github",
       "version": "1.7.2"
     },
     {
       "id": "tullamods/OmniCC", 
-      "site": "github",
+      "source": "github",
       "version": ""
     }
   ]

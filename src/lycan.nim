@@ -6,6 +6,7 @@ import std/strutils
 
 import std/os
 import std/parseopt
+import std/re
 
 import zip/zipfiles
 
@@ -22,7 +23,7 @@ proc displayHelp() =
 
 type
   AddonSource = enum
-    github, gitlab, wowint, unknown
+    github, gitlab, tukui, wowint, unknown
 
 type
   Addon* = object
@@ -30,28 +31,51 @@ type
     source: AddonSource
     version: string
 
-proc determineSource(arg: string): (string, AddonSource) =
-  if arg.startsWith("http://"):
-    var source: AddonSource
-    let parts = arg[7..^1].split('/')
-    if parts[0].contains("github"):
-      return (parts[1] & "/" & parts[2], github)
-    if parts[0].contains("gitlab"):
-      return (parts[1] & "/" & parts[2], gitlab)
-    if parts[0].contains("wowinterface"):
-      # need to strip .html off the end
-      return (parts[2], wowint)
-  
-  if arg.startsWith("github.com")
-  return unknown
+let config = parseJson(readFile("test/lycan.json"))
+let flavor = "retail"
+let tempDir = getTempDir()
+
+proc parseArg(arg: string): (string, AddonSource) =
+  var matches: array[4, string]
+  let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.\w*)\.(?:com|org)\/(?:(?:(.\w*\/(.\w*-?\w*)(?:\.html)?))|(?:download\.php\?ui=(.*)))"
+  discard find(arg, pattern, matches, 0, len(arg))
+  case matches[0]
+    of "github":
+      return (matches[1], github)
+    of "gitlab":
+      return (matches[1], gitlab)
+    of "tukui":
+      return (matches[3], tukui)
+    of "wowinterface":
+      return (matches[2], wowint)
+    else:
+      echo "Unable to determine the addon source."
+      quit()
+
+proc loadInstalledAddons(): seq[Addon] =
+  let addonsJson = parseJson(readFile("test/lycan_addons.json"))
+  var addons: seq[Addon]
+  for addon in addonsJson["addons"]:
+    addons.add(addon.to(Addon))
+  return addons
+
+let addons: seq[Addon] = loadInstalledAddons()
+echo addons
 
 proc installAddon(arg: string) =
-  let id, source = parseArg(arg)
+  let (id, source) = parseArg(arg)
   case source
-  of github:
-    return
-  else:
-    return
+    of github:
+      echo id, "  ", source
+      for addon in addons:
+        if addon.id == id:
+          return
+          #remove the directories and update the lycan_addons.json
+        else:
+          return
+          #add entry to lycan_addons.json
+    else:
+      quit()
 
 var opt = initOptParser(commandLineParams(), 
                         shortNoVal = {'h', 'l', 'u'}, 
@@ -75,18 +99,8 @@ for kind, key, val in opt.getopt():
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
 # addons folder is <WoW>\_retail_\Interface\AddOns
 
-let config = parseJson(readFile("test/lycan.json"))
-let flavor = "retail"
-let tempDir = getTempDir()
 
-proc loadInstalledAddons(): seq[Addon] =
-  let addonsJson = parseJson(readFile("test/lycan_addons.json"))
-  var addons: seq[Addon]
-  for addon in addonsJson["addons"]:
-    addons.add(addon.to(Addon))
-  return addons
 
-let addons: seq[Addon] = loadInstalledAddons()
 
 proc getLatestJson(url: string): Future[string] {.async.} =
   var client = newAsyncHttpClient()
@@ -155,8 +169,6 @@ for addon in addons:
 
   let version = latestJson["name"].getStr()
   if version == addon.version:
-    echo addon.id, " skipped"
+    continue
   else:
-    echo addon.id, " updating"
     updateAddon(addon, latestJson["assets"])
-    
