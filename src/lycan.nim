@@ -162,15 +162,13 @@ proc installGithub(project: string) =
   writeInstalledAddons()
 
 proc parseAddonUrl(arg: string): (string, AddonSource) =
-  var matches: array[4, string]
-  let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.\w*)\.(?:com|org)\/(?:(?:(.\w*\/(.\w*-?\w*)(?:\.html)?))|(?:download\.php\?ui=(.*)))"
+  var matches: array[1, string]
+  let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.*)\.(?:com|org)"
+  # let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.\w*)\.(?:com|org)\/(?:(?:(.\w*\/(.\w*-?\w*)(?:\.html)?))|(?:download\.php\?ui=(.*)))"
   discard find(arg, pattern, matches, 0, len(arg))
-  # match[0] is the base url we match against
-  # match[1] is the github and gitlab project name
-  # match[2] is the wowinterface project name
-  # match[3] is the tukui project name
   case matches[0]
     of "github":
+      # TODO add additional parsing for github
       return (matches[1], github)
     of "gitlab":
       # gitlab can have arbitrarily deep project nesting unlike github
