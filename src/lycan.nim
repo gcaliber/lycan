@@ -14,7 +14,7 @@ import zip/zipfiles
 
 type
   AddonSource = enum
-    github, gitlab, tukui, wowint, unknown
+    github, gitlab, tukui_main, tukui_addon, wowint, unknown
 
 type
   Addon* = object
@@ -162,25 +162,32 @@ proc installGithub(project: string) =
   writeInstalledAddons()
 
 proc parseAddonUrl(arg: string): (string, AddonSource) =
-  var matches: array[1, string]
-  let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.*)\.(?:com|org)"
-  # let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.\w*)\.(?:com|org)\/(?:(?:(.\w*\/(.\w*-?\w*)(?:\.html)?))|(?:download\.php\?ui=(.*)))"
-  discard find(arg, pattern, matches, 0, len(arg))
-  case matches[0]
+  var urlmatch: array[2, string]
+  let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.*)\.(?:com|org)\/(.*)"
+  #instead of discarding we should check for -1 as an error
+  discard find(arg, pattern, urlmatch, 0, len(arg))
+  case urlmatch[0]
     of "github":
-      # TODO add additional parsing for github
-      return (matches[1], github)
+      return (urlmatch[1], github)
     of "gitlab":
-      # gitlab can have arbitrarily deep project nesting unlike github
-      # should probably strip the url first, then pattern match the rest of the string seperately
-      # based on the source, this will make for much simpler regex for anyone reading the code
       # https://gitlab.com/siebens/legacy/autoactioncam
       # https://gitlab.com/api/v4/projects/siebens%2Flegacy%2Fautoactioncam/releases
-      return (matches[1], gitlab)
+      return (urlmatch[1], gitlab)
     of "tukui":
-      return (matches[3], tukui)
+      let p = re"^(download|addons)\.php\?(?:ui|id)=(.*)"
+      var m: array[2, string]
+      discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
+      if m[0] == "download":
+        return (m[1], tukui_main)
+      elif m[0] == "addons":
+        return (m[1], tukui_addon)
     of "wowinterface":
-      return (matches[2], wowint)
+      # https://api.mmoui.com/v3/game/WOW/filedetails/{project}.json
+      # https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
+      let p = re"^downloads\/info(\d*)-"
+      var m: array[1, string]
+      discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
+      return (m[0], wowint)
     else:
       echo "Unable to determine the addon source."
       quit()
