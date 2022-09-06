@@ -1,5 +1,11 @@
 {
+  "flavor": "retail",
   "retail": {
-    "dir": "/home/mike/projects/lycan/test/addons/"
+    "installedAddons": "home/mike/projects/lycan/test/lycan_addons.json",
+    "addonDir": "/home/mike/projects/lycan/test/addons/"
+  },
+  "wotlk": {
+    "installedAddons": "home/mike/projects/lycan/test/lycan_addons.json",
+    "addonDir": "/home/mike/projects/lycan/test/addons/"
   }
 }

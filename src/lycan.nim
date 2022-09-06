@@ -13,7 +13,7 @@ import std/re
 import zip/zipfiles
 
 type
-  AddonSource = enum
+  AddonSource* = enum
     github, gitlab, tukui_main, tukui_addon, wowint, unknown
 
 type
@@ -24,19 +24,28 @@ type
     version: string
     directories: seq[string]
 
-let config = parseJson(readFile("test/lycan.json"))
-let flavor = "retail"
-let tempDir = getTempDir()
+  Config* = object
+    flavor: string
+    tempDir: string
+    addonDir: string
+    installedAddonsJson: string
+    addons: seq[Addon]
 
-
-proc loadInstalledAddons(): seq[Addon] =
-  let addonsJson = parseJson(readFile("test/lycan_addons.json"))
+proc loadInstalledAddons(file: string): seq[Addon] =
+  let addonsJson = parseJson(readFile(file))
   var addons: seq[Addon]
   for addon in addonsJson:
     addons.add(addon.to(Addon))
   return addons
 
-var addons: seq[Addon] = loadInstalledAddons()
+let configJson = parseJson(readFile("test/lycan.json"))
+let flavor = configJson["flavor"].getStr()
+let install = configJson[flavor]["installedAddons"].getStr()
+var config* = Config(flavor: flavor,
+                    tempDir: getTempDir(),
+                    addonDir: configJson[flavor]["addonDir"].getStr(),
+                    installedAddonsJson: install,
+                    addons: loadInstalledAddons(install))
 
 
 proc getLatestJson(url: string): Future[string] {.async.} =
@@ -93,7 +102,7 @@ proc getAddonDirs(root: string): seq[string] =
 
 proc writeInstalledAddons() =
   let options = ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef)
-  let addonsJson = addons.toJson(opt = options)
+  let addonsJson = config.addons.toJson(opt = options)
   let file = open("test/lycan_addons.json", fmWrite)
   write(file, addonsJson)
   close(file)
@@ -118,17 +127,17 @@ proc installGithub(project: string) =
     name = hash(project).intToStr() & ".zip"
     downloadUrl = latestJson["zipball_url"].getStr()
     
-  let filename = joinPath(tempDir, name)
+  let filename = joinPath(config.tempDir, name)
   waitFor downloadAsset(downloadUrl, filename)
   
-  let extractDir = joinPath(tempDir, name.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'}))
+  let extractDir = joinPath(config.tempDir, name.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'}))
   unzip(filename, extractDir)
   
   let sourceDirs = getAddonDirs(extractDir)
   var addonsDirs: seq[string]
   for dir in sourceDirs:
     let (_, name) = splitPath(dir)
-    let destinationDir = joinPath(config[flavor]["dir"].getStr(), name)
+    let destinationDir = joinPath(config.addonDir, name)
     moveDir(dir, destinationDir)
     addonsDirs.add(name)
   
@@ -140,15 +149,16 @@ proc installGithub(project: string) =
   newAddon.version = if v != "": v else: latestJson["tag_name"].getStr()
   newAddon.directories = addonsDirs
   
-  for addon in addons:
+  for addon in config.addons:
     if addon.project == project:
       newAddon.id = addon.id
-      addons.delete(addons.find(addon))
+      delete(config.addons, find(config.addons, addon))
+      config.addons.delete(config.addons.find(addon))
       break
   
   var ids: set[int16]
   if newAddon.id == -1:
-    for addon in addons:
+    for addon in config.addons:
       incl(ids, addon.id)
   
   var id: int16 = 1
@@ -158,7 +168,7 @@ proc installGithub(project: string) =
     else:
       newAddon.id = id
 
-  addons.add(newAddon)
+  config.addons.add(newAddon)
   writeInstalledAddons()
 
 proc parseAddonUrl(arg: string): (string, AddonSource) =
@@ -201,17 +211,17 @@ proc installAddon(arg: string) =
       quit()
 
 proc removeAddon(arg: int16) = 
-  for addon in addons:
+  for addon in config.addons:
     if addon.id == arg:
       for dir in addon.directories:
-        removeDir(joinPath(config[flavor]["dir"].getStr(), dir))
-      addons.delete(addons.find(addon))
+        removeDir(joinPath(config.addonDir, dir))
+      config.addons.delete(config.addons.find(addon))
       writeInstalledAddons()
       return
   echo &"Error: No installed addon with id \"{arg}\""
 
 proc removeAddon(arg: string) = 
-  for addon in addons:
+  for addon in config.addons:
     if addon.project == arg:
       removeAddon(addon.id)
       return
