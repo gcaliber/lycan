@@ -14,7 +14,7 @@ import zip/zipfiles
 
 type
   AddonSource* = enum
-    github, gitlab, tukui_main, tukui_addon, wowint, unknown
+    GITHUB, GITLAB, TUKUI_MAIN, TUKUI_ADDON, WOWINT, UNKNOWN
 
 type
   Addon* = object
@@ -31,8 +31,8 @@ type
     installedAddonsJson: string
     addons: seq[Addon]
 
-proc loadInstalledAddons(file: string): seq[Addon] =
-  let addonsJson = parseJson(readFile(file))
+proc loadInstalledAddons(filename: string): seq[Addon] =
+  let addonsJson = parseJson(readFile(filename))
   var addons: seq[Addon]
   for addon in addonsJson:
     addons.add(addon.to(Addon))
@@ -40,12 +40,12 @@ proc loadInstalledAddons(file: string): seq[Addon] =
 
 let configJson = parseJson(readFile("test/lycan.json"))
 let flavor = configJson["flavor"].getStr()
-let install = configJson[flavor]["installedAddons"].getStr()
+let installedFile = configJson[flavor]["installedAddons"].getStr()
 var config* = Config(flavor: flavor,
                     tempDir: getTempDir(),
                     addonDir: configJson[flavor]["addonDir"].getStr(),
-                    installedAddonsJson: install,
-                    addons: loadInstalledAddons(install))
+                    installedAddonsJson: installedFile,
+                    addons: loadInstalledAddons(installedFile))
 
 
 proc getLatestJson(url: string): Future[string] {.async.} =
@@ -94,8 +94,8 @@ proc getAddonDirs(root: string): seq[string] =
   for (dir, name) in tocPaths:
     let lc = name.toLower()
     if not (lc.contains("tbc") or lc.contains("wtolk") or lc.contains("bcc") or lc.contains("classic")):
-      let (base, _) = splitPath(dir)
-      let newPath = joinPath(base, name)
+      let parent = parentDir(dir)
+      let newPath = joinPath(parent, name)
       moveDir(dir, newPath)
       return @[newPath]
 
@@ -103,9 +103,38 @@ proc getAddonDirs(root: string): seq[string] =
 proc writeInstalledAddons() =
   let options = ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef)
   let addonsJson = config.addons.toJson(opt = options)
-  let file = open("test/lycan_addons.json", fmWrite)
+  let file = open(config.installedAddonsJson, fmWrite)
   write(file, addonsJson)
   close(file)
+
+
+proc newAddon(project: string, source: AddonSource, version: string, dirs: seq[string]): Addon =
+  var newAddon: Addon
+  newAddon.project = project
+  newAddon.source = source
+  newAddon.version = version
+  newAddon.directories = dirs
+  
+  newAddon.id = -1
+  for addon in config.addons:
+    if addon.project == project:
+      newAddon.id = addon.id
+      config.addons.delete(config.addons.find(addon))
+      break
+  
+  var ids: set[int16]
+  if newAddon.id == -1:
+    for addon in config.addons:
+      incl(ids, addon.id)
+  
+  var id: int16 = 1
+  while newAddon.id == -1:
+    if id in ids:
+      id += 1
+    else:
+      newAddon.id = id
+  return newAddon
+
 
 proc installGithub(project: string) =
   let latestUrl = fmt"https://api.github.com/repos/{project}/releases/latest"
@@ -119,8 +148,8 @@ proc installGithub(project: string) =
       if asset["content_type"].getStr() == "application/json":
         continue
       name = asset["name"].getStr()
-      let n = name.toLower()
-      if not (n.contains("bcc") or n.contains("tbc") or n.contains("wotlk") or n.contains("classic")):
+      let lc = name.toLower()
+      if not (lc.contains("bcc") or lc.contains("tbc") or lc.contains("wotlk") or lc.contains("classic")):
         downloadUrl = asset["browser_download_url"].getStr()
         break
   else:
@@ -140,36 +169,48 @@ proc installGithub(project: string) =
     let destinationDir = joinPath(config.addonDir, name)
     moveDir(dir, destinationDir)
     addonsDirs.add(name)
-  
-  var newAddon: Addon
-  newAddon.id = -1
-  newAddon.project = project
-  newAddon.source = github
-  let v = latestJson["name"].getStr()
-  newAddon.version = if v != "": v else: latestJson["tag_name"].getStr()
-  newAddon.directories = addonsDirs
-  
-  for addon in config.addons:
-    if addon.project == project:
-      newAddon.id = addon.id
-      delete(config.addons, find(config.addons, addon))
-      config.addons.delete(config.addons.find(addon))
-      break
-  
-  var ids: set[int16]
-  if newAddon.id == -1:
-    for addon in config.addons:
-      incl(ids, addon.id)
-  
-  var id: int16 = 1
-  while newAddon.id == -1:
-    if id in ids:
-      id += 1
-    else:
-      newAddon.id = id
 
-  config.addons.add(newAddon)
+  let v = latestJson["name"].getStr()
+  let version = if v != "": v else: latestJson["tag_name"].getStr()
+  config.addons.add(newAddon(project, GITHUB, version, addonsDirs))
   writeInstalledAddons()
+
+
+proc installGitlab(project: string) =
+  # https://gitlab.com/siebens/legacy/autoactioncam
+  # https://gitlab.com/api/v4/projects/siebens%2Flegacy%2Fautoactioncam/releases
+  let urlEncodedProject = project.replace("/", "%2F")
+  let latestUrl = fmt"https://gitlab.com/api/v4/projects/{urlEncodedProject}/releases"
+  let latestJson = parseJson(waitFor getLatestJson(latestUrl))[0]
+  
+  var downloadUrl:string
+  for source in latestJson["assets"]["sources"]:
+    if source["format"].getStr() == "zip":
+      downloadUrl = source["url"].getStr()
+  if downloadUrl == "":
+    echo fmt"Error: Unable to determine download URL for {project}"
+  var name: string = downloadURL.rsplit('/', maxsplit = 1)[0]
+  
+  # TODO: duplicated code below
+  let filename = joinPath(config.tempDir, name)
+  waitFor downloadAsset(downloadUrl, filename)
+  
+  let extractDir = joinPath(config.tempDir, name.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'}))
+  unzip(filename, extractDir)
+  
+  let sourceDirs = getAddonDirs(extractDir)
+  var addonsDirs: seq[string]
+  for dir in sourceDirs:
+    let (_, name) = splitPath(dir)
+    let destinationDir = joinPath(config.addonDir, name)
+    moveDir(dir, destinationDir)
+    addonsDirs.add(name)
+  
+  let v = latestJson["tag_name"].getStr()
+  let version = if v != "": v else: latestJson["name"].getStr()
+  config.addons.add(newAddon(project, GITLAB, version, addonsDirs))
+  writeInstalledAddons()
+
 
 proc parseAddonUrl(arg: string): (string, AddonSource) =
   var urlmatch: array[2, string]
@@ -178,54 +219,57 @@ proc parseAddonUrl(arg: string): (string, AddonSource) =
   discard find(arg, pattern, urlmatch, 0, len(arg))
   case urlmatch[0]
     of "github":
-      return (urlmatch[1], github)
+      # https://github.com/Stanzilla/AdvancedInterfaceOptions
+      return (urlmatch[1], GITHUB)
     of "gitlab":
       # https://gitlab.com/siebens/legacy/autoactioncam
       # https://gitlab.com/api/v4/projects/siebens%2Flegacy%2Fautoactioncam/releases
-      return (urlmatch[1], gitlab)
+      return (urlmatch[1], GITLAB)
     of "tukui":
       let p = re"^(download|addons)\.php\?(?:ui|id)=(.*)"
       var m: array[2, string]
       discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
       if m[0] == "download":
-        return (m[1], tukui_main)
+        return (m[1], TUKUI_MAIN)
       elif m[0] == "addons":
-        return (m[1], tukui_addon)
+        return (m[1], TUKUI_ADDON)
     of "wowinterface":
       # https://api.mmoui.com/v3/game/WOW/filedetails/{project}.json
       # https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
       let p = re"^downloads\/info(\d*)-"
       var m: array[1, string]
       discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
-      return (m[0], wowint)
+      return (m[0], WOWINT)
     else:
       echo "Unable to determine the addon source."
       quit()
 
 proc installAddon(arg: string) =
-  let (id, source) = parseAddonUrl(arg)
+  let (project, source) = parseAddonUrl(arg)
   case source
-    of github:
-      installGithub(id)
+    of GITHUB:
+      installGithub(project)
+    of GITLAB:
+      installGitlab(project)
     else:
       quit()
 
-proc removeAddon(arg: int16) = 
+proc removeAddon(n: int16) = 
   for addon in config.addons:
-    if addon.id == arg:
+    if addon.id == n:
       for dir in addon.directories:
         removeDir(joinPath(config.addonDir, dir))
       config.addons.delete(config.addons.find(addon))
       writeInstalledAddons()
       return
-  echo &"Error: No installed addon with id \"{arg}\""
+  echo &"Error: No installed addon with id \"{n}\""
 
-proc removeAddon(arg: string) = 
+proc removeAddon(project: string) = 
   for addon in config.addons:
-    if addon.project == arg:
+    if addon.project == project:
       removeAddon(addon.id)
       return
-  echo &"Error: \"{arg}\" not found"
+  echo &"Error: \"{project}\" not found"
 
 proc displayHelp() =
   echo "  -u, --update                 Update installed addons"
