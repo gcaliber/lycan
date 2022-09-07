@@ -12,9 +12,12 @@ import std/re
 
 import zip/zipfiles
 
+const
+  tukuiAddonUrl = "https://www.tukui.org/api.php?addons"
+
 type
   AddonSource* = enum
-    GITHUB, GITLAB, TUKUI_MAIN, TUKUI_ADDON, WOWINT, UNKNOWN
+    GITHUB, GITLAB, TUKUI, WOWINT, UNKNOWN
 
 type
   Addon* = object
@@ -30,6 +33,7 @@ type
     addonDir: string
     installedAddonsJson: string
     addons: seq[Addon]
+    tukuiCache: JsonNode
 
 proc loadInstalledAddons(filename: string): seq[Addon] =
   let addonsJson = parseJson(readFile(filename))
@@ -45,7 +49,8 @@ var config* = Config(flavor: flavor,
                     tempDir: getTempDir(),
                     addonDir: configJson[flavor]["addonDir"].getStr(),
                     installedAddonsJson: installedFile,
-                    addons: loadInstalledAddons(installedFile))
+                    addons: loadInstalledAddons(installedFile),
+                    tukuiCache: nil)
 
 
 proc getLatestJson(url: string): Future[string] {.async.} =
@@ -53,12 +58,17 @@ proc getLatestJson(url: string): Future[string] {.async.} =
   return await client.getContent(url)
 
 
-proc downloadAsset(url: string, filename: string) {.async.} =
+proc downloadAsset(url: string): Future[string] {.async.} =
   var client = newAsyncHttpClient()
   let response = await client.get(url)
+  # echo response.headers["content-disposition"]
+  # "content-disposition": @["attachment; filename=AdvancedInterfaceOptions-1.7.2.zip"]
+  let filename = response.headers["content-disposition"].split('=')[1]
+  # echo filename
   let file = open(filename, fmWrite)
   write(file, waitFor response.body)
   close(file)
+  return filename
 
 
 proc unzip(filename: string, extractDir: string) =
@@ -136,44 +146,45 @@ proc newAddon(project: string, source: AddonSource, version: string, dirs: seq[s
   return newAddon
 
 
+proc moveAddonDirs(extractDir: string): seq[string] =
+  let sourceDirs = getAddonDirs(extractDir)
+  var addonDirs: seq[string]
+  for dir in sourceDirs:
+    let name = lastPathPart(dir)
+    let destinationDir = joinPath(config.addonDir, name)
+    moveDir(dir, destinationDir)
+    addonDirs.add(name)
+  return addonDirs
+
+
 proc installGithub(project: string) =
   let latestUrl = fmt"https://api.github.com/repos/{project}/releases/latest"
   let latestJson = parseJson(waitFor getLatestJson(latestUrl))
   
   let assets = latestJson["assets"]
-  var name: string
   var downloadUrl: string
   if len(assets) != 0:
     for asset in assets:
       if asset["content_type"].getStr() == "application/json":
         continue
-      name = asset["name"].getStr()
-      let lc = name.toLower()
+      let lc = asset["name"].getStr().toLower()
       if not (lc.contains("bcc") or lc.contains("tbc") or lc.contains("wotlk") or lc.contains("classic")):
         downloadUrl = asset["browser_download_url"].getStr()
         break
   else:
-    name = hash(project).intToStr() & ".zip"
     downloadUrl = latestJson["zipball_url"].getStr()
     
-  let filename = joinPath(config.tempDir, name)
-  waitFor downloadAsset(downloadUrl, filename)
+  let filename = waitFor downloadAsset(downloadUrl)
+  let path = joinPath(config.tempDir, filename)
   
-  let extractDir = joinPath(config.tempDir, name.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'}))
+  let extractDir = joinPath(config.tempDir, path.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'}))
   unzip(filename, extractDir)
   
-  let sourceDirs = getAddonDirs(extractDir)
-  var addonsDirs: seq[string]
-  for dir in sourceDirs:
-    let (_, name) = splitPath(dir)
-    let destinationDir = joinPath(config.addonDir, name)
-    moveDir(dir, destinationDir)
-    addonsDirs.add(name)
+  let addonDirs = moveAddonDirs(extractDir)
 
   let v = latestJson["name"].getStr()
   let version = if v != "": v else: latestJson["tag_name"].getStr()
-  config.addons.add(newAddon(project, GITHUB, version, addonsDirs))
-  writeInstalledAddons()
+  config.addons.add(newAddon(project, GITHUB, version, addonDirs))
 
 
 proc installGitlab(project: string) =
@@ -189,28 +200,46 @@ proc installGitlab(project: string) =
       downloadUrl = source["url"].getStr()
   if downloadUrl == "":
     echo fmt"Error: Unable to determine download URL for {project}"
-  var name: string = downloadURL.rsplit('/', maxsplit = 1)[0]
   
-  # TODO: duplicated code below
-  let filename = joinPath(config.tempDir, name)
-  waitFor downloadAsset(downloadUrl, filename)
+  let filename = waitFor downloadAsset(downloadUrl)
+  let path = joinPath(config.tempDir, filename)
   
-  let extractDir = joinPath(config.tempDir, name.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'}))
+  let extractDir = joinPath(config.tempDir, path.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'}))
   unzip(filename, extractDir)
   
-  let sourceDirs = getAddonDirs(extractDir)
-  var addonsDirs: seq[string]
-  for dir in sourceDirs:
-    let (_, name) = splitPath(dir)
-    let destinationDir = joinPath(config.addonDir, name)
-    moveDir(dir, destinationDir)
-    addonsDirs.add(name)
+  let addonDirs = moveAddonDirs(extractDir)
   
   let v = latestJson["tag_name"].getStr()
   let version = if v != "": v else: latestJson["name"].getStr()
-  config.addons.add(newAddon(project, GITLAB, version, addonsDirs))
-  writeInstalledAddons()
+  config.addons.add(newAddon(project, GITLAB, version, addonDirs))
 
+
+proc getTukuiAddons(): JsonNode =
+  if config.tukuiCache.isNil:
+    config.tukuiCache = parseJson(waitFor getLatestJson(tukuiAddonUrl))
+  return config.tukuiCache
+
+
+proc installTukUI(project: string) =
+  var latestJson: JsonNode
+  if project == "elvui" or project == "tukui":
+    latestJson = parseJson(waitFor getLatestJson(fmt"https://www.tukui.org/api.php?ui={project}"))
+  else:
+    latestJson = getTukuiAddons()[project]
+
+  let downloadUrl = latestJson["url"].getStr()
+  let version = latestJson["version"].getStr()
+  
+  let filename = waitFor downloadAsset(downloadUrl)
+  let path = joinPath(config.tempDir, filename)
+  
+  let extractDir = joinPath(config.tempDir, path.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'}))
+  unzip(filename, extractDir)
+  
+  let addonDirs = moveAddonDirs(extractDir)
+  
+  config.addons.add(newAddon(project, TUKUI, version, addonDirs))
+  
 
 proc parseAddonUrl(arg: string): (string, AddonSource) =
   var urlmatch: array[2, string]
@@ -226,13 +255,10 @@ proc parseAddonUrl(arg: string): (string, AddonSource) =
       # https://gitlab.com/api/v4/projects/siebens%2Flegacy%2Fautoactioncam/releases
       return (urlmatch[1], GITLAB)
     of "tukui":
-      let p = re"^(download|addons)\.php\?(?:ui|id)=(.*)"
-      var m: array[2, string]
+      let p = re"^(?:download|addons)\.php\?(?:ui|id)=(.*)"
+      var m: array[1, string]
       discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
-      if m[0] == "download":
-        return (m[1], TUKUI_MAIN)
-      elif m[0] == "addons":
-        return (m[1], TUKUI_ADDON)
+      return (m[0], TUKUI)
     of "wowinterface":
       # https://api.mmoui.com/v3/game/WOW/filedetails/{project}.json
       # https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
@@ -251,8 +277,13 @@ proc installAddon(arg: string) =
       installGithub(project)
     of GITLAB:
       installGitlab(project)
+    of TUKUI:
+      installTukUI(project)
+    of WOWINT:
+      echo "TODO"
     else:
       quit()
+  writeInstalledAddons()
 
 proc removeAddon(n: int16) = 
   for addon in config.addons:
