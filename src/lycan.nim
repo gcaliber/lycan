@@ -1,5 +1,4 @@
 import std/asyncdispatch
-import std/hashes
 import std/httpclient
 import std/json
 import std/jsonutils
@@ -12,28 +11,36 @@ import std/re
 
 import zip/zipfiles
 
+when not defined(release):
+  import print
+
 const
   tukuiAddonUrl = "https://www.tukui.org/api.php?addons"
 
 type
-  AddonSource* = enum
-    GITHUB, GITLAB, TUKUI, WOWINT, UNKNOWN
+  AddonSource = enum
+    GITHUB, GITLAB, TUKUI, WOWINT
 
-type
-  Addon* = object
+  Addon = object
     id: int16
     project: string
     source: AddonSource
     version: string
     directories: seq[string]
+  
+  UpdateData = object
+    needed: bool
+    downloadUrl: string
+    version: string
 
-  Config* = object
+  Config = object
     flavor: string
     tempDir: string
     addonDir: string
     installedAddonsJson: string
     addons: seq[Addon]
     tukuiCache: JsonNode
+    updates: seq[UpdateData]
 
 proc loadInstalledAddons(filename: string): seq[Addon] =
   let addonsJson = parseJson(readFile(filename))
@@ -52,6 +59,20 @@ var config* = Config(flavor: flavor,
                     addons: loadInstalledAddons(installedFile),
                     tukuiCache: nil)
 
+proc getLatestUrl(project: string, source: AddonSource): string =
+  case source
+    of GITHUB:
+      return fmt"https://api.github.com/repos/{project}/releases/latest"
+    of GITLAB:
+      let urlEncodedProject = project.replace("/", "%2F")
+      return fmt"https://gitlab.com/api/v4/projects/{urlEncodedProject}/releases"
+    of TUKUI:
+      if project == "elvui" or project == "tukui":
+        return fmt"https://www.tukui.org/api.php?ui={project}"
+      else:
+        return "https://www.tukui.org/api.php?addons"
+    else:
+      quit()
 
 proc getLatestJson(url: string): Future[string] {.async.} =
   var client = newAsyncHttpClient()
@@ -62,8 +83,8 @@ proc downloadAsset(url: string): Future[string] {.async.} =
   var client = newAsyncHttpClient()
   let response = await client.get(url)
   # echo response.headers["content-disposition"]
-  # "content-disposition": @["attachment; filename=AdvancedInterfaceOptions-1.7.2.zip"]
-  let filename = response.headers["content-disposition"].split('=')[1]
+  # "content-disposition": ["attachment; filename=AdvancedInterfaceOptions-1.7.2.zip"]
+  let filename = joinPath(config.tempDir, response.headers["content-disposition"].split('=')[1])
   # echo filename
   let file = open(filename, fmWrite)
   write(file, waitFor response.body)
@@ -74,7 +95,7 @@ proc downloadAsset(url: string): Future[string] {.async.} =
 proc unzip(filename: string, extractDir: string) =
   var z: ZipArchive
   if not z.open(filename):
-    echo fmt"Opening {filename} failed"
+    echo fmt"Extracting {filename} failed"
     return
   z.extractAll(extractDir)
 
@@ -101,6 +122,7 @@ proc getAddonDirs(root: string): seq[string] =
           addonDirs.add(path)
   # we did not find a toc file with a matching directory name
   # so we need to rename the directory based on the best toc file found
+  # currently this just means excluding ones that contain classic names
   for (dir, name) in tocPaths:
     let lc = name.toLower()
     if not (lc.contains("tbc") or lc.contains("wtolk") or lc.contains("bcc") or lc.contains("classic")):
@@ -111,8 +133,7 @@ proc getAddonDirs(root: string): seq[string] =
 
 
 proc writeInstalledAddons() =
-  let options = ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef)
-  let addonsJson = config.addons.toJson(opt = options)
+  let addonsJson = config.addons.toJson(opt = ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
   let file = open(config.installedAddonsJson, fmWrite)
   write(file, addonsJson)
   close(file)
@@ -177,7 +198,7 @@ proc installGithub(project: string) =
   let filename = waitFor downloadAsset(downloadUrl)
   let path = joinPath(config.tempDir, filename)
   
-  let extractDir = joinPath(config.tempDir, path.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'}))
+  let extractDir = path.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'})
   unzip(filename, extractDir)
   
   let addonDirs = moveAddonDirs(extractDir)
@@ -204,7 +225,7 @@ proc installGitlab(project: string) =
   let filename = waitFor downloadAsset(downloadUrl)
   let path = joinPath(config.tempDir, filename)
   
-  let extractDir = joinPath(config.tempDir, path.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'}))
+  let extractDir = path.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'})
   unzip(filename, extractDir)
   
   let addonDirs = moveAddonDirs(extractDir)
@@ -233,7 +254,7 @@ proc installTukUI(project: string) =
   let filename = waitFor downloadAsset(downloadUrl)
   let path = joinPath(config.tempDir, filename)
   
-  let extractDir = joinPath(config.tempDir, path.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'}))
+  let extractDir = path.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'})
   unzip(filename, extractDir)
   
   let addonDirs = moveAddonDirs(extractDir)
@@ -246,7 +267,7 @@ proc parseAddonUrl(arg: string): (string, AddonSource) =
   let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.*)\.(?:com|org)\/(.*)"
   #instead of discarding we should check for -1 as an error
   discard find(arg, pattern, urlmatch, 0, len(arg))
-  case urlmatch[0]
+  case urlmatch[0].toLower()
     of "github":
       # https://github.com/Stanzilla/AdvancedInterfaceOptions
       return (urlmatch[1], GITHUB)
@@ -302,6 +323,11 @@ proc removeAddon(project: string) =
       return
   echo &"Error: \"{project}\" not found"
 
+proc updateAll(): {.async.} =
+  # get seq[Future[UpdateData]]
+  # loop over seq, 
+
+
 proc displayHelp() =
   echo "  -u, --update                 Update installed addons"
   echo "  -i, --install <arg>          Install an addon where <arg> is the url"
@@ -349,13 +375,15 @@ for kind, key, val in opt.getopt():
     target = key
   else: displayHelp()
 case command
-  of install: installAddon(target)
+  of install: 
+    installAddon(target)
   of remove:
     if len(target) > 4:
       removeAddon(target)
     else:
       removeAddon(int16(parseInt(target)))
-  of update: echo "TODO"
+  of update:
+    discard updateAll()
   of list: echo "TODO"
   of pin: echo "TODO"
   of unpin: echo "TODO"
