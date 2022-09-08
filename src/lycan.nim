@@ -1,8 +1,10 @@
 import std/asyncdispatch
+import std/asyncfile
 import std/enumerate
 import std/httpclient
 import std/json
 import std/jsonutils
+import std/sequtils
 import std/strformat
 import std/strutils
 
@@ -31,9 +33,11 @@ type
     directories: seq[string]
   
   UpdateData = object
+    addon: Addon
     needed: bool
     url: string
     version: string
+    file: string
 
   Config = object
     flavor: string
@@ -43,6 +47,8 @@ type
     addons: seq[Addon]
     tukuiCache: JsonNode
     updates: seq[UpdateData]
+
+
 
 proc loadInstalledAddons(filename: string): seq[Addon] =
   let addonsJson = parseJson(readFile(filename))
@@ -64,21 +70,23 @@ var config* = Config(flavor: flavor,
 
 
 proc getLatestJson(url: string): Future[string] {.async.} =
-  var client = newAsyncHttpClient()
+  let client = newAsyncHttpClient()
   return await client.getContent(url)
 
 
 proc downloadAsset(url: string): Future[string] {.async.} =
-  var client = newAsyncHttpClient()
-  let response = await client.get(url)
-  # echo response.headers["content-disposition"]
-  # "content-disposition": ["attachment; filename=AdvancedInterfaceOptions-1.7.2.zip"]
-  let filename = joinPath(config.tempDir, response.headers["content-disposition"].split('=')[1])
-  # echo filename
-  let file = open(filename, fmWrite)
-  write(file, waitFor response.body)
-  close(file)
-  return filename
+  let client = newAsyncHttpClient()
+  let future = client.get(url)
+  yield future
+  if future.failed:
+    return ""
+  else:
+    let resp = future.read()
+    let filename = joinPath(config.tempDir, resp.headers["content-disposition"].split('=')[1])
+    let file = openAsync(filename, fmWrite)
+    yield writeFromStream(file, resp.bodyStream)
+    close(file)
+    return filename
 
 
 proc unzip(filename: string, extractDir: string) =
@@ -354,7 +362,7 @@ proc getDownloadUrl(json: JsonNode, source: AddonSource): string =
     else:
       return json["zipball_url"].getStr()
   of GITLAB:
-    for source in json["assets"]["sources"]:
+    for source in json[0]["assets"]["sources"]:
       if source["format"].getStr() == "zip":
         return source["url"].getStr()
   of TUKUI:
@@ -362,25 +370,40 @@ proc getDownloadUrl(json: JsonNode, source: AddonSource): string =
   else:
     echo "Unable to get url"
 
+
 proc getUpdateData(addon: Addon): Future[UpdateData] {.async.} =
   let future = getLatestJson(addon.latestUrl)
   yield future
-  let json = parseJson(await future)
-  let version = getVersion(json, addon.source)
-  return UpdateData(needed: version != addon.version,
-                    url: getDownloadUrl(json, addon.source),
-                    version: version)
+  if future.failed:
+    return UpdateData(addon: addon, needed: false, url: "", version: "", file: "")
+  else:
+    let json = parseJson(future.read())
+    let version = getVersion(json, addon.source)
+    return UpdateData(addon: addon,
+                      needed: version != addon.version,
+                      url: getDownloadUrl(json, addon.source),
+                      version: version,
+                      file: "")
 
 
 proc updateAll() {.async.} =
-  var updates: seq[Future[UpdateData]]
+  var futureUpdates: seq[Future[UpdateData]]
   for addon in config.addons:
-    echo addon.project
-    updates.add(getUpdateData(addon))
+    echo "   ", addon.project
+    futureUpdates.add(getUpdateData(addon))
 
-  let done = await all(updates)
-  for item in done:
-    echo item.url
+  var updates: seq[UpdateData]
+  for future in futureUpdates:
+    yield future
+    let update = future.read()
+    let  = downloadAsset(update.url)
+  
+  let downloadData = zip(config.addons, futureFiles)
+    
+    # extract downloaded files
+    # move extracted files
+    # write installed addons
+  
   return
 
 proc displayHelp() =
@@ -438,13 +461,13 @@ case command
     else:
       removeAddon(int16(parseInt(target)))
   of update:
-    discard updateAll()
+    waitFor updateAll()
   of list: echo "TODO list"
   of pin: echo "TODO pin"
   of unpin: echo "TODO unpin"
   of restore: echo "TODO restore"
   of none: 
-    discard updateAll()
+    waitFor updateAll()
 
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
 # addons folder is <WoW>\_retail_\Interface\AddOns
