@@ -1,4 +1,5 @@
 import std/asyncdispatch
+import std/enumerate
 import std/httpclient
 import std/json
 import std/jsonutils
@@ -25,12 +26,13 @@ type
     id: int16
     project: string
     source: AddonSource
+    latestUrl: string
     version: string
     directories: seq[string]
   
   UpdateData = object
     needed: bool
-    downloadUrl: string
+    url: string
     version: string
 
   Config = object
@@ -59,20 +61,7 @@ var config* = Config(flavor: flavor,
                     addons: loadInstalledAddons(installedFile),
                     tukuiCache: nil)
 
-proc getLatestUrl(project: string, source: AddonSource): string =
-  case source
-    of GITHUB:
-      return fmt"https://api.github.com/repos/{project}/releases/latest"
-    of GITLAB:
-      let urlEncodedProject = project.replace("/", "%2F")
-      return fmt"https://gitlab.com/api/v4/projects/{urlEncodedProject}/releases"
-    of TUKUI:
-      if project == "elvui" or project == "tukui":
-        return fmt"https://www.tukui.org/api.php?ui={project}"
-      else:
-        return "https://www.tukui.org/api.php?addons"
-    else:
-      quit()
+
 
 proc getLatestJson(url: string): Future[string] {.async.} =
   var client = newAsyncHttpClient()
@@ -323,10 +312,76 @@ proc removeAddon(project: string) =
       return
   echo &"Error: \"{project}\" not found"
 
-proc updateAll(): {.async.} =
-  # get seq[Future[UpdateData]]
-  # loop over seq, 
+proc getLatestUrl(project: string, source: AddonSource): string =
+  case source
+    of GITHUB:
+      return fmt"https://api.github.com/repos/{project}/releases/latest"
+    of GITLAB:
+      let urlEncodedProject = project.replace("/", "%2F")
+      return fmt"https://gitlab.com/api/v4/projects/{urlEncodedProject}/releases"
+    of TUKUI:
+      if project == "elvui" or project == "tukui":
+        return fmt"https://www.tukui.org/api.php?ui={project}"
+      else:
+        return "https://www.tukui.org/api.php?addons"
+    else:
+      quit()
 
+proc getVersion(json: JsonNode, source: AddonSource): string =
+  case source
+  of GITHUB:
+    let v = json["tag_name"].getStr()
+    return if v != "": v else: json["name"].getStr()
+  of GITLAB:
+    let v = json[0]["tag_name"].getStr()
+    return if v != "": v else: json[0]["name"].getStr()
+  of TUKUI:
+    return json["version"].getStr()
+  else:
+    echo "Unable to get version"
+
+proc getDownloadUrl(json: JsonNode, source: AddonSource): string =
+  case source
+  of GITHUB:
+    let assets = json["assets"]
+    if len(assets) != 0:
+      for asset in assets:
+        if asset["content_type"].getStr() == "application/json":
+          continue
+        let lc = asset["name"].getStr().toLower()
+        if not (lc.contains("bcc") or lc.contains("tbc") or lc.contains("wotlk") or lc.contains("classic")):
+          return asset["browser_download_url"].getStr()
+    else:
+      return json["zipball_url"].getStr()
+  of GITLAB:
+    for source in json["assets"]["sources"]:
+      if source["format"].getStr() == "zip":
+        return source["url"].getStr()
+  of TUKUI:
+    return json["url"].getStr()
+  else:
+    echo "Unable to get url"
+
+proc getUpdateData(addon: Addon): Future[UpdateData] {.async.} =
+  let future = getLatestJson(addon.latestUrl)
+  yield future
+  let json = parseJson(await future)
+  let version = getVersion(json, addon.source)
+  return UpdateData(needed: version != addon.version,
+                    url: getDownloadUrl(json, addon.source),
+                    version: version)
+
+
+proc updateAll() {.async.} =
+  var updates: seq[Future[UpdateData]]
+  for addon in config.addons:
+    echo addon.project
+    updates.add(getUpdateData(addon))
+
+  let done = await all(updates)
+  for item in done:
+    echo item.url
+  return
 
 proc displayHelp() =
   echo "  -u, --update                 Update installed addons"
@@ -384,11 +439,12 @@ case command
       removeAddon(int16(parseInt(target)))
   of update:
     discard updateAll()
-  of list: echo "TODO"
-  of pin: echo "TODO"
-  of unpin: echo "TODO"
-  of restore: echo "TODO"
-  of none: echo "TODO" #if no args at all just update everything
+  of list: echo "TODO list"
+  of pin: echo "TODO pin"
+  of unpin: echo "TODO unpin"
+  of restore: echo "TODO restore"
+  of none: 
+    discard updateAll()
 
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
 # addons folder is <WoW>\_retail_\Interface\AddOns
