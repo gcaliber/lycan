@@ -1,5 +1,1 @@
-[
-  {"id":1,"project":"Stanzilla/AdvancedInterfaceOptions","source":"GITHUB","latestUrl":"https://api.github.com/repos/Stanzilla/AdvancedInterfaceOptions/releases/latest","version":"1.7","directories":["AdvancedInterfaceOptions"]},
-  {"id":3,"project":"siebens/legacy/autoactioncam","source":"GITLAB","latestUrl":"https://gitlab.com/api/v4/projects/siebens%2Flegacy%2Fautoactioncam/releases","version":"1.3.4","directories":["AutoActionCam"]},
-  {"id":2,"project":"tullamods/Bagnon","source":"GITHUB","latestUrl":"https://api.github.com/repos/tullamods/Bagnon/releases/latest","version":"7.2","directories":["Bagnon"]}
-]
+[{"id":1,"project":"24608","name":"Hekili Priority Helper","source":"WOWINT","version":"v9.2.5-1.0.10","directories":["Hekili"]}]

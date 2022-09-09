@@ -1,24 +1,18 @@
 import std/asyncdispatch
 import std/asyncfile
-import std/enumerate
 import std/httpclient
 import std/json
 import std/jsonutils
-import std/sequtils
-import std/strformat
-import std/strutils
-
 import std/os
 import std/parseopt
 import std/re
+import std/strformat
+import std/strutils
 
 import zip/zipfiles
 
 when not defined(release):
   import print
-
-const
-  tukuiAddonUrl = "https://www.tukui.org/api.php?addons"
 
 type
   AddonSource = enum
@@ -27,8 +21,8 @@ type
   Addon = object
     id: int16
     project: string
+    name: string
     source: AddonSource
-    latestUrl: string
     version: string
     directories: seq[string]
   
@@ -37,7 +31,8 @@ type
     needed: bool
     url: string
     version: string
-    file: string
+    name: string
+    filename: string
 
   Config = object
     flavor: string
@@ -45,12 +40,13 @@ type
     addonDir: string
     installedAddonsJson: string
     addons: seq[Addon]
-    tukuiCache: JsonNode
+    tukuiCache: string
     updates: seq[UpdateData]
 
 
-
 proc loadInstalledAddons(filename: string): seq[Addon] =
+  if not fileExists(filename):
+    return @[]
   let addonsJson = parseJson(readFile(filename))
   var addons: seq[Addon]
   for addon in addonsJson:
@@ -60,18 +56,42 @@ proc loadInstalledAddons(filename: string): seq[Addon] =
 let configJson = parseJson(readFile("test/lycan.json"))
 let flavor = configJson["flavor"].getStr()
 let installedFile = configJson[flavor]["installedAddons"].getStr()
-var config* = Config(flavor: flavor,
+var config = Config(flavor: flavor,
                     tempDir: getTempDir(),
                     addonDir: configJson[flavor]["addonDir"].getStr(),
                     installedAddonsJson: installedFile,
                     addons: loadInstalledAddons(installedFile),
-                    tukuiCache: nil)
+                    tukuiCache: "")
 
 
+proc getLatestUrl(project: string, source: AddonSource): string =
+  case source
+    of GITHUB:
+      return fmt"https://api.github.com/repos/{project}/releases/latest"
+    of GITLAB:
+      let urlEncodedProject = project.replace("/", "%2F")
+      return fmt"https://gitlab.com/api/v4/projects/{urlEncodedProject}/releases"
+    of TUKUI:
+      if project == "elvui" or project == "tukui":
+        return fmt"https://www.tukui.org/api.php?ui={project}"
+      else:
+        return "https://www.tukui.org/api.php?addons"
+    of WOWINT:
+      return fmt"https://api.mmoui.com/v3/game/WOW/filedetails/{project}.json"
 
-proc getLatestJson(url: string): Future[string] {.async.} =
-  let client = newAsyncHttpClient()
-  return await client.getContent(url)
+
+proc getLatestJson(addon: Addon): Future[string] {.async.} =
+  # maybe this could yield the getContent and return a JsonNode itself since we always want to parse it
+  # this would simplify the tukui case as well
+  let url = getLatestUrl(addon.project, addon.source)
+  if addon.source == TUKUI and addon.project != "elvui" and addon.project != "tukui":
+    if config.tukuiCache == "":
+      let client = newAsyncHttpClient()
+      config.tukuiCache = await client.getContent(url)
+    return config.tukuiCache
+  else:
+    let client = newAsyncHttpClient()
+    return await client.getContent(url)
 
 
 proc downloadAsset(url: string): Future[string] {.async.} =
@@ -82,7 +102,7 @@ proc downloadAsset(url: string): Future[string] {.async.} =
     return ""
   else:
     let resp = future.read()
-    let filename = joinPath(config.tempDir, resp.headers["content-disposition"].split('=')[1])
+    let filename = joinPath(config.tempDir, resp.headers["content-disposition"].split('=')[1].strip(chars = {'\'', '"'}))
     let file = openAsync(filename, fmWrite)
     yield writeFromStream(file, resp.bodyStream)
     close(file)
@@ -97,6 +117,36 @@ proc unzip(filename: string, extractDir: string) =
   z.extractAll(extractDir)
 
 
+proc writeInstalledAddons() =
+  let addonsJson = config.addons.toJson(opt = ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
+  let file = open(config.installedAddonsJson, fmWrite)
+  write(file, addonsJson)
+  close(file)
+
+
+proc getAddonWithId(project: string, name: string, source: AddonSource, version: string, dirs: seq[string]): Addon =
+  var newAddon = Addon(project: project, name: name, source: source, version: version, directories: dirs, id: -1)
+
+  for addon in config.addons:
+    if addon.project == project:
+      newAddon.id = addon.id
+      config.addons.delete(config.addons.find(addon))
+      return newAddon
+  
+  var ids: set[int16]
+  if newAddon.id == -1:
+    for addon in config.addons:
+      incl(ids, addon.id)
+  
+  var id: int16 = 1
+  while newAddon.id == -1:
+    if id in ids:
+      id += 1
+    else:
+      newAddon.id = id
+  return newAddon
+
+# TODO: Robustness, this can fail in some situations although those shouldn't really ever happen
 proc getAddonDirs(root: string): seq[string] =
   var addonDirs: seq[string] = @[root]
   var n = 0
@@ -129,144 +179,26 @@ proc getAddonDirs(root: string): seq[string] =
       return @[newPath]
 
 
-proc writeInstalledAddons() =
-  let addonsJson = config.addons.toJson(opt = ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
-  let file = open(config.installedAddonsJson, fmWrite)
-  write(file, addonsJson)
-  close(file)
-
-
-proc newAddon(project: string, source: AddonSource, version: string, dirs: seq[string]): Addon =
-  var newAddon: Addon
-  newAddon.project = project
-  newAddon.source = source
-  newAddon.version = version
-  newAddon.directories = dirs
-  
-  newAddon.id = -1
-  for addon in config.addons:
-    if addon.project == project:
-      newAddon.id = addon.id
-      config.addons.delete(config.addons.find(addon))
-      break
-  
-  var ids: set[int16]
-  if newAddon.id == -1:
-    for addon in config.addons:
-      incl(ids, addon.id)
-  
-  var id: int16 = 1
-  while newAddon.id == -1:
-    if id in ids:
-      id += 1
-    else:
-      newAddon.id = id
-  return newAddon
-
-
 proc moveAddonDirs(extractDir: string): seq[string] =
   let sourceDirs = getAddonDirs(extractDir)
   var addonDirs: seq[string]
   for dir in sourceDirs:
     let name = lastPathPart(dir)
-    let destinationDir = joinPath(config.addonDir, name)
-    moveDir(dir, destinationDir)
+    let destination = joinPath(config.addonDir, name)
+    moveDir(dir, destination)
     addonDirs.add(name)
   return addonDirs
 
 
-proc installGithub(project: string) =
-  let latestUrl = fmt"https://api.github.com/repos/{project}/releases/latest"
-  let latestJson = parseJson(waitFor getLatestJson(latestUrl))
-  
-  let assets = latestJson["assets"]
-  var downloadUrl: string
-  if len(assets) != 0:
-    for asset in assets:
-      if asset["content_type"].getStr() == "application/json":
-        continue
-      let lc = asset["name"].getStr().toLower()
-      if not (lc.contains("bcc") or lc.contains("tbc") or lc.contains("wotlk") or lc.contains("classic")):
-        downloadUrl = asset["browser_download_url"].getStr()
-        break
-  else:
-    downloadUrl = latestJson["zipball_url"].getStr()
-    
-  let filename = waitFor downloadAsset(downloadUrl)
-  let path = joinPath(config.tempDir, filename)
-  
-  let extractDir = path.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'})
-  unzip(filename, extractDir)
-  
-  let addonDirs = moveAddonDirs(extractDir)
-
-  let v = latestJson["name"].getStr()
-  let version = if v != "": v else: latestJson["tag_name"].getStr()
-  config.addons.add(newAddon(project, GITHUB, version, addonDirs))
-
-
-proc installGitlab(project: string) =
-  # https://gitlab.com/siebens/legacy/autoactioncam
-  # https://gitlab.com/api/v4/projects/siebens%2Flegacy%2Fautoactioncam/releases
-  let urlEncodedProject = project.replace("/", "%2F")
-  let latestUrl = fmt"https://gitlab.com/api/v4/projects/{urlEncodedProject}/releases"
-  let latestJson = parseJson(waitFor getLatestJson(latestUrl))[0]
-  
-  var downloadUrl:string
-  for source in latestJson["assets"]["sources"]:
-    if source["format"].getStr() == "zip":
-      downloadUrl = source["url"].getStr()
-  if downloadUrl == "":
-    echo fmt"Error: Unable to determine download URL for {project}"
-  
-  let filename = waitFor downloadAsset(downloadUrl)
-  let path = joinPath(config.tempDir, filename)
-  
-  let extractDir = path.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'})
-  unzip(filename, extractDir)
-  
-  let addonDirs = moveAddonDirs(extractDir)
-  
-  let v = latestJson["tag_name"].getStr()
-  let version = if v != "": v else: latestJson["name"].getStr()
-  config.addons.add(newAddon(project, GITLAB, version, addonDirs))
-
-
-proc getTukuiAddons(): JsonNode =
-  if config.tukuiCache.isNil:
-    config.tukuiCache = parseJson(waitFor getLatestJson(tukuiAddonUrl))
-  return config.tukuiCache
-
-
-proc installTukUI(project: string) =
-  var latestJson: JsonNode
-  if project == "elvui" or project == "tukui":
-    latestJson = parseJson(waitFor getLatestJson(fmt"https://www.tukui.org/api.php?ui={project}"))
-  else:
-    latestJson = getTukuiAddons()[project]
-
-  let downloadUrl = latestJson["url"].getStr()
-  let version = latestJson["version"].getStr()
-  
-  let filename = waitFor downloadAsset(downloadUrl)
-  let path = joinPath(config.tempDir, filename)
-  
-  let extractDir = path.strip(chars = {'z', 'i', 'p'}).strip(chars = {'.'})
-  unzip(filename, extractDir)
-  
-  let addonDirs = moveAddonDirs(extractDir)
-  
-  config.addons.add(newAddon(project, TUKUI, version, addonDirs))
-  
-
-proc parseAddonUrl(arg: string): (string, AddonSource) =
+proc parseAddonArg(arg: string): (string, AddonSource) =
   var urlmatch: array[2, string]
   let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.*)\.(?:com|org)\/(.*)"
   #instead of discarding we should check for -1 as an error
   discard find(arg, pattern, urlmatch, 0, len(arg))
   case urlmatch[0].toLower()
     of "github":
-      # https://github.com/Stanzilla/AdvancedInterfaceOptions
+      # https://github.com/Tercioo/Plater-Nameplates
+      # https://api.github.com/repos/Tercioo/Plater-Nameplates/releases/latest
       return (urlmatch[1], GITHUB)
     of "gitlab":
       # https://gitlab.com/siebens/legacy/autoactioncam
@@ -279,29 +211,13 @@ proc parseAddonUrl(arg: string): (string, AddonSource) =
       return (m[0], TUKUI)
     of "wowinterface":
       # https://api.mmoui.com/v3/game/WOW/filedetails/{project}.json
+      # https://api.mmoui.com/v3/game/WOW/filedetails/24608.json
       # https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
       let p = re"^downloads\/info(\d*)-"
       var m: array[1, string]
       discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
       return (m[0], WOWINT)
-    else:
-      echo "Unable to determine the addon source."
-      quit()
 
-proc installAddon(arg: string) =
-  let (project, source) = parseAddonUrl(arg)
-  case source
-    of GITHUB:
-      installGithub(project)
-    of GITLAB:
-      installGitlab(project)
-    of TUKUI:
-      installTukUI(project)
-    of WOWINT:
-      echo "TODO"
-    else:
-      quit()
-  writeInstalledAddons()
 
 proc removeAddon(n: int16) = 
   for addon in config.addons:
@@ -320,20 +236,6 @@ proc removeAddon(project: string) =
       return
   echo &"Error: \"{project}\" not found"
 
-proc getLatestUrl(project: string, source: AddonSource): string =
-  case source
-    of GITHUB:
-      return fmt"https://api.github.com/repos/{project}/releases/latest"
-    of GITLAB:
-      let urlEncodedProject = project.replace("/", "%2F")
-      return fmt"https://gitlab.com/api/v4/projects/{urlEncodedProject}/releases"
-    of TUKUI:
-      if project == "elvui" or project == "tukui":
-        return fmt"https://www.tukui.org/api.php?ui={project}"
-      else:
-        return "https://www.tukui.org/api.php?addons"
-    else:
-      quit()
 
 proc getVersion(json: JsonNode, source: AddonSource): string =
   case source
@@ -345,9 +247,20 @@ proc getVersion(json: JsonNode, source: AddonSource): string =
     return if v != "": v else: json[0]["name"].getStr()
   of TUKUI:
     return json["version"].getStr()
-  else:
-    echo "Unable to get version"
+  of WOWINT:
+    return json[0]["UIVersion"].getStr()
 
+
+proc getPrettyName(json: JsonNode, project: string, source: AddonSource): string =
+  case source
+  of GITHUB, GITLAB:
+    return project
+  of TUKUI:
+    return json["name"].getStr()
+  of WOWINT:
+    return json[0]["UIName"].getStr()
+  
+  
 proc getDownloadUrl(json: JsonNode, source: AddonSource): string =
   case source
   of GITHUB:
@@ -367,15 +280,15 @@ proc getDownloadUrl(json: JsonNode, source: AddonSource): string =
         return source["url"].getStr()
   of TUKUI:
     return json["url"].getStr()
-  else:
-    echo "Unable to get url"
+  of WOWINT:
+    return json[0]["UIDownload"].getStr()
 
 
 proc getUpdateData(addon: Addon): Future[UpdateData] {.async.} =
-  let future = getLatestJson(addon.latestUrl)
+  let future = getLatestJson(addon)
   yield future
   if future.failed:
-    return UpdateData(addon: addon, needed: false, url: "", version: "", file: "")
+    return UpdateData(addon: addon, needed: false, url: "", version: "", filename: "")
   else:
     let json = parseJson(future.read())
     let version = getVersion(json, addon.source)
@@ -383,28 +296,55 @@ proc getUpdateData(addon: Addon): Future[UpdateData] {.async.} =
                       needed: version != addon.version,
                       url: getDownloadUrl(json, addon.source),
                       version: version,
-                      file: "")
+                      name: getPrettyName(json, addon.project, addon.source),
+                      filename: "")
 
 
-proc updateAll() {.async.} =
+proc getUpdatedFiles(addons: seq[Addon]): Future[seq[UpdateData]] {.async.} =
   var futureUpdates: seq[Future[UpdateData]]
-  for addon in config.addons:
-    echo "   ", addon.project
+  for addon in addons:
     futureUpdates.add(getUpdateData(addon))
 
   var updates: seq[UpdateData]
   for future in futureUpdates:
     yield future
-    let update = future.read()
-    let  = downloadAsset(update.url)
-  
-  let downloadData = zip(config.addons, futureFiles)
-    
-    # extract downloaded files
-    # move extracted files
-    # write installed addons
-  
+    var update = future.read()
+    if update.needed:
+      let filename = downloadAsset(update.url)
+      yield filename
+      update.filename = filename.read()
+      updates.add(update)
+
+  return updates
+
+# TODO: install and update should really be combined
+proc installAddon(arg: string) =
+  let (project, source) = parseAddonArg(arg)
+  let addon = getAddonWithId(project, "", source, "", @[])
+  let data = (waitFor getUpdatedFiles(@[addon]))[0]
+  let (dir, name, _) = splitFile(data.filename)
+  let extractDir = joinPath(dir, name)
+  unzip(data.filename, extractDir)
+  let addonDirs = moveAddonDirs(extractDir)
+  config.addons.add(getAddonWithId(data.addon.project, data.name, data.addon.source, data.version, addonDirs))
+  writeInstalledAddons()
+
+
+proc updateAll() =
+  let updates = waitFor getUpdatedFiles(config.addons)
+  when not defined(release):
+    print(updates)
+
+  # TODO: probably want to thread this for speed
+  for data in updates:
+    let (dir, name, _) = splitFile(data.filename)
+    let extractDir = joinPath(dir, name)
+    unzip(data.filename, extractDir)
+    let addonDirs = moveAddonDirs(extractDir)
+    config.addons.add(getAddonWithId(data.addon.project, data.name, data.addon.source, data.version, addonDirs))
+  writeInstalledAddons()
   return
+  
 
 proc displayHelp() =
   echo "  -u, --update                 Update installed addons"
@@ -423,9 +363,9 @@ var opt = initOptParser(commandLineParams(),
 
 type
   Command = enum
-    install, remove, update, list, pin, unpin, restore, none
+    install, remove, update, list, pin, unpin, restore
 
-var command: Command = none
+var command: Command = update
 var target: string = ""
 for kind, key, val in opt.getopt():
   case kind
@@ -452,6 +392,7 @@ for kind, key, val in opt.getopt():
     # echo "cmd ", "'", key, "'"
     target = key
   else: displayHelp()
+
 case command
   of install: 
     installAddon(target)
@@ -461,13 +402,11 @@ case command
     else:
       removeAddon(int16(parseInt(target)))
   of update:
-    waitFor updateAll()
+    updateAll()
   of list: echo "TODO list"
   of pin: echo "TODO pin"
   of unpin: echo "TODO unpin"
   of restore: echo "TODO restore"
-  of none: 
-    waitFor updateAll()
 
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
 # addons folder is <WoW>\_retail_\Interface\AddOns
