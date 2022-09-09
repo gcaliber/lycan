@@ -1,22 +1,18 @@
-import std/asyncdispatch
-import std/asyncfile
+import std/[asyncdispatch, asyncfile]
 import std/httpclient
-import std/json
-import std/jsonutils
+import std/[json, jsonutils]
 import std/os
 import std/parseopt
 import std/re
-import std/strformat
-import std/strutils
+import std/[strformat, strutils]
 
 import zip/zipfiles
-
 when not defined(release):
   import print
 
 type
   AddonSource = enum
-    GITHUB, GITLAB, TUKUI, WOWINT
+    GITHUB, GITHUB_REPO, GITLAB, TUKUI, WOWINT
 
   Addon = object
     id: int16
@@ -64,7 +60,7 @@ var config = Config(flavor: flavor,
                     tukuiCache: "")
 
 
-proc getLatestUrl(project: string, source: AddonSource): string =
+proc getLatestUrl(project: string, source: AddonSource, branch: string = "master"): string =
   case source
     of GITHUB:
       return fmt"https://api.github.com/repos/{project}/releases/latest"
@@ -78,11 +74,11 @@ proc getLatestUrl(project: string, source: AddonSource): string =
         return "https://www.tukui.org/api.php?addons"
     of WOWINT:
       return fmt"https://api.mmoui.com/v3/game/WOW/filedetails/{project}.json"
+    of GITHUB_REPO:
+      return fmt"https://api.github.com/repos/{project}/commits/{branch}"
 
 
 proc getLatestJson(addon: Addon): Future[string] {.async.} =
-  # maybe this could yield the getContent and return a JsonNode itself since we always want to parse it
-  # this would simplify the tukui case as well
   let url = getLatestUrl(addon.project, addon.source)
   if addon.source == TUKUI and addon.project != "elvui" and addon.project != "tukui":
     if config.tukuiCache == "":
@@ -172,7 +168,7 @@ proc getAddonDirs(root: string): seq[string] =
   # currently this just means excluding ones that contain classic names
   for (dir, name) in tocPaths:
     let lc = name.toLower()
-    if not (lc.contains("tbc") or lc.contains("wtolk") or lc.contains("bcc") or lc.contains("classic")):
+    if not (lc.contains("tbc") or lc.contains("wtolk") or lc.contains("wrath") or lc.contains("bcc") or lc.contains("classic")):
       let parent = parentDir(dir)
       let newPath = joinPath(parent, name)
       moveDir(dir, newPath)
@@ -249,11 +245,13 @@ proc getVersion(json: JsonNode, source: AddonSource): string =
     return json["version"].getStr()
   of WOWINT:
     return json[0]["UIVersion"].getStr()
+  of GITHUB_REPO:
+    return json["sha"].getStr()[0 .. 6]
 
 
 proc getPrettyName(json: JsonNode, project: string, source: AddonSource): string =
   case source
-  of GITHUB, GITLAB:
+  of GITHUB, GITHUB_REPO, GITLAB:
     return project
   of TUKUI:
     return json["name"].getStr()
@@ -261,7 +259,7 @@ proc getPrettyName(json: JsonNode, project: string, source: AddonSource): string
     return json[0]["UIName"].getStr()
   
   
-proc getDownloadUrl(json: JsonNode, source: AddonSource): string =
+proc getDownloadUrl(json: JsonNode, project: string, source: AddonSource, branch: string = "master"): string =
   case source
   of GITHUB:
     let assets = json["assets"]
@@ -270,7 +268,7 @@ proc getDownloadUrl(json: JsonNode, source: AddonSource): string =
         if asset["content_type"].getStr() == "application/json":
           continue
         let lc = asset["name"].getStr().toLower()
-        if not (lc.contains("bcc") or lc.contains("tbc") or lc.contains("wotlk") or lc.contains("classic")):
+        if not (lc.contains("bcc") or lc.contains("tbc") or lc.contains("wotlk") or lc.contains("wrath") or lc.contains("classic")):
           return asset["browser_download_url"].getStr()
     else:
       return json["zipball_url"].getStr()
@@ -282,6 +280,8 @@ proc getDownloadUrl(json: JsonNode, source: AddonSource): string =
     return json["url"].getStr()
   of WOWINT:
     return json[0]["UIDownload"].getStr()
+  of GITHUB_REPO:
+    return fmt"https://www.github.com/{project}/archive/refs/heads{branch}.zip"
 
 
 proc getUpdateData(addon: Addon): Future[UpdateData] {.async.} =
@@ -294,7 +294,7 @@ proc getUpdateData(addon: Addon): Future[UpdateData] {.async.} =
     let version = getVersion(json, addon.source)
     return UpdateData(addon: addon,
                       needed: version != addon.version,
-                      url: getDownloadUrl(json, addon.source),
+                      url: getDownloadUrl(json, addon.project, addon.source),
                       version: version,
                       name: getPrettyName(json, addon.project, addon.source),
                       filename: "")
@@ -317,33 +317,17 @@ proc getUpdatedFiles(addons: seq[Addon]): Future[seq[UpdateData]] {.async.} =
 
   return updates
 
-# TODO: install and update should really be combined
-proc installAddon(arg: string) =
-  let (project, source) = parseAddonArg(arg)
-  let addon = getAddonWithId(project, "", source, "", @[])
-  let data = (waitFor getUpdatedFiles(@[addon]))[0]
-  let (dir, name, _) = splitFile(data.filename)
-  let extractDir = joinPath(dir, name)
-  unzip(data.filename, extractDir)
-  let addonDirs = moveAddonDirs(extractDir)
-  config.addons.add(getAddonWithId(data.addon.project, data.name, data.addon.source, data.version, addonDirs))
-  writeInstalledAddons()
 
-
-proc updateAll() =
-  let updates = waitFor getUpdatedFiles(config.addons)
-  when not defined(release):
-    print(updates)
-
-  # TODO: probably want to thread this for speed
+proc installAddons(addons: seq[Addon]) =
+  let updates = waitFor getUpdatedFiles(addons)
   for data in updates:
     let (dir, name, _) = splitFile(data.filename)
     let extractDir = joinPath(dir, name)
     unzip(data.filename, extractDir)
     let addonDirs = moveAddonDirs(extractDir)
+
     config.addons.add(getAddonWithId(data.addon.project, data.name, data.addon.source, data.version, addonDirs))
   writeInstalledAddons()
-  return
   
 
 proc displayHelp() =
@@ -352,6 +336,7 @@ proc displayHelp() =
   echo "  -a, --add <arg>              Same as --install"
   echo "  -r, --remove <arg>           Remove an installed addon where <arg> is the id# or project"
   echo "  -l, --list                   List installed addons"
+  echo "      --clone <branch>         Install from github as a clone of <branch> instead of a release, defaults to master"
   echo "      --pin <addon id#>        Pin an addon at the current version, do not update"
   echo "      --unpin <addon id#>      Unpin an addon, resume updates"
   echo "      --restore <addon id#>    Restore addon to last backed up version and pin it"
@@ -363,10 +348,10 @@ var opt = initOptParser(commandLineParams(),
 
 type
   Command = enum
-    install, remove, update, list, pin, unpin, restore
+    install, clone, remove, update, list, pin, unpin, restore
 
 var command: Command = update
-var target: string = ""
+var args: seq[string]
 for kind, key, val in opt.getopt():
   case kind
   of cmdShortOption, cmdLongOption:
@@ -380,29 +365,36 @@ for kind, key, val in opt.getopt():
         of "l", "list": command = list
         else: displayHelp()
     else:
-      target = val
+      args.add(val)
       case key:
         of "add", "install": command = install
         of "remove": command = remove
         of "pin": command = pin
         of "unpin": command = unpin
         of "restore": command = restore
+        of "clone:": command = clone
         else: displayHelp()
   of cmdArgument:
     # echo "cmd ", "'", key, "'"
-    target = key
+    args.add(key)
   else: displayHelp()
 
 case command
-  of install: 
-    installAddon(target)
+  of install:
+    let (project, source) = parseAddonArg(arg)
+    let addon = getAddonWithId(project, "", source, "", @[]) 
+    installAddons(@[addon])
+  of clone:
+    let (project, source) = parseAddonArg(arg)
+    let addon = getAddonWithId(project, "", source, "", @[]) 
+    installAddons(@[addon])
   of remove:
-    if len(target) > 4:
-      removeAddon(target)
+    if len(arg) > 4:
+      removeAddon(arg)
     else:
-      removeAddon(int16(parseInt(target)))
+      removeAddon(int16(parseInt(arg)))
   of update:
-    updateAll()
+    installAddons(config.addons)
   of list: echo "TODO list"
   of pin: echo "TODO pin"
   of unpin: echo "TODO unpin"
