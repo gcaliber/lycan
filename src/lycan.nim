@@ -17,6 +17,7 @@ type
   Addon = object
     id: int16
     project: string
+    branch: string
     name: string
     source: AddonSource
     version: string
@@ -120,7 +121,7 @@ proc writeInstalledAddons() =
   close(file)
 
 
-proc getAddonWithId(project: string, name: string, source: AddonSource, version: string, dirs: seq[string]): Addon =
+proc getAddonWithId(project: string, source: AddonSource, name: string = "", version: string = "", dirs: seq[string] = @[], branch: string = ""): Addon =
   var newAddon = Addon(project: project, name: name, source: source, version: version, directories: dirs, id: -1)
 
   for addon in config.addons:
@@ -185,26 +186,36 @@ proc moveAddonDirs(extractDir: string): seq[string] =
     addonDirs.add(name)
   return addonDirs
 
-
-proc parseAddonArg(arg: string): (string, AddonSource) =
+# TODO: Robustness: Verify this is actually a valid source. Currently we just fail
+# somewhere else if it is not and so don't report a very good error message.
+proc parseAddonArg(arg: string): Addon =
   var urlmatch: array[2, string]
-  let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.*)\.(?:com|org)\/(.*)"
-  #instead of discarding we should check for -1 as an error
-  discard find(arg, pattern, urlmatch, 0, len(arg))
+  let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.*)\.(?:com|org)\/(.*[^\/\n])"
+  var found = find(arg, pattern, urlmatch, 0, len(arg))
+  if found == -1:
+    echo "No url found"
+    quit()
   case urlmatch[0].toLower()
     of "github":
       # https://github.com/Tercioo/Plater-Nameplates
       # https://api.github.com/repos/Tercioo/Plater-Nameplates/releases/latest
-      return (urlmatch[1], GITHUB)
+      let p = re"^(.+\/.+)\/tree\/(.+)"
+      var m: array[2, string]
+      found = find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
+      if found == -1:
+        return getAddonWithId(urlmatch[1], GITHUB)
+      else:
+        return getAddonWithId(m[0], GITHUB_REPO, branch = m[1])
     of "gitlab":
       # https://gitlab.com/siebens/legacy/autoactioncam
       # https://gitlab.com/api/v4/projects/siebens%2Flegacy%2Fautoactioncam/releases
-      return (urlmatch[1], GITLAB)
+      return getAddonWithId(urlmatch[1], GITLAB)
     of "tukui":
       let p = re"^(?:download|addons)\.php\?(?:ui|id)=(.*)"
       var m: array[1, string]
       discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
-      return (m[0], TUKUI)
+      #return (m[0], TUKUI)
+      return getAddonWithId(m[0], TUKUI)
     of "wowinterface":
       # https://api.mmoui.com/v3/game/WOW/filedetails/{project}.json
       # https://api.mmoui.com/v3/game/WOW/filedetails/24608.json
@@ -212,7 +223,7 @@ proc parseAddonArg(arg: string): (string, AddonSource) =
       let p = re"^downloads\/info(\d*)-"
       var m: array[1, string]
       discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
-      return (m[0], WOWINT)
+      return getAddonWithId(m[0], WOWINT)
 
 
 proc removeAddon(n: int16) = 
@@ -246,13 +257,13 @@ proc getVersion(json: JsonNode, source: AddonSource): string =
   of WOWINT:
     return json[0]["UIVersion"].getStr()
   of GITHUB_REPO:
-    return json["sha"].getStr()[0 .. 6]
+    return json["sha"].getStr()
 
 
 proc getPrettyName(json: JsonNode, project: string, source: AddonSource): string =
   case source
   of GITHUB, GITHUB_REPO, GITLAB:
-    return project
+    return project.split('/')[^1]
   of TUKUI:
     return json["name"].getStr()
   of WOWINT:
@@ -281,7 +292,7 @@ proc getDownloadUrl(json: JsonNode, project: string, source: AddonSource, branch
   of WOWINT:
     return json[0]["UIDownload"].getStr()
   of GITHUB_REPO:
-    return fmt"https://www.github.com/{project}/archive/refs/heads{branch}.zip"
+    return fmt"https://www.github.com/{project}/archive/refs/heads/{branch}.zip"
 
 
 proc getUpdateData(addon: Addon): Future[UpdateData] {.async.} =
@@ -326,7 +337,7 @@ proc installAddons(addons: seq[Addon]) =
     unzip(data.filename, extractDir)
     let addonDirs = moveAddonDirs(extractDir)
 
-    config.addons.add(getAddonWithId(data.addon.project, data.name, data.addon.source, data.version, addonDirs))
+    config.addons.add(getAddonWithId(data.addon.project, data.addon.source, name = data.name, version = data.version, dirs = addonDirs))
   writeInstalledAddons()
   
 
@@ -348,10 +359,10 @@ var opt = initOptParser(commandLineParams(),
 
 type
   Command = enum
-    install, clone, remove, update, list, pin, unpin, restore
+    install, remove, update, list, pin, unpin, restore
 
 var command: Command = update
-var args: seq[string]
+var arg: string
 for kind, key, val in opt.getopt():
   case kind
   of cmdShortOption, cmdLongOption:
@@ -365,28 +376,22 @@ for kind, key, val in opt.getopt():
         of "l", "list": command = list
         else: displayHelp()
     else:
-      args.add(val)
+      arg = val
       case key:
         of "add", "install": command = install
         of "remove": command = remove
         of "pin": command = pin
         of "unpin": command = unpin
         of "restore": command = restore
-        of "clone:": command = clone
         else: displayHelp()
   of cmdArgument:
     # echo "cmd ", "'", key, "'"
-    args.add(key)
+    arg = key
   else: displayHelp()
 
 case command
   of install:
-    let (project, source) = parseAddonArg(arg)
-    let addon = getAddonWithId(project, "", source, "", @[]) 
-    installAddons(@[addon])
-  of clone:
-    let (project, source) = parseAddonArg(arg)
-    let addon = getAddonWithId(project, "", source, "", @[]) 
+    let addon = parseAddonArg(arg)
     installAddons(@[addon])
   of remove:
     if len(arg) > 4:
