@@ -1,5 +1,8 @@
 import std/[asyncdispatch, asyncfile]
-import std/httpclient
+import myhttpclient
+# This is a modified std/httpclient that only changes the reportProgress time from
+# 1 second to 50 milliseconds. When the files are small, like with wow addons, 1 second
+# just isn't enough time to display any useful information.
 import std/[json, jsonutils]
 import std/os
 import std/parseopt
@@ -9,6 +12,9 @@ import std/[strformat, strutils]
 import zip/zipfiles
 when not defined(release):
   import print
+
+import illwill
+import progressbar
 
 type
   AddonSource = enum
@@ -40,7 +46,6 @@ type
     tukuiCache: string
     updates: seq[UpdateData]
 
-
 proc loadInstalledAddons(filename: string): seq[Addon] =
   if not fileExists(filename):
     return @[]
@@ -49,6 +54,16 @@ proc loadInstalledAddons(filename: string): seq[Addon] =
   for addon in addonsJson:
     addons.add(addon.to(Addon))
   return addons
+
+# proc exitProc() {.noconv.} =
+#   illwillDeinit()
+#   showCursor()
+#   quit(0)
+
+# illwillInit(fullscreen=false)
+# setControlCHook(exitProc)
+# hideCursor()
+# var tb = newTerminalBuffer(terminalWidth(), terminalHeight())
 
 let configJson = parseJson(readFile("test/lycan.json"))
 let flavor = configJson["flavor"].getStr()
@@ -91,8 +106,13 @@ proc getLatestJson(addon: Addon): Future[string] {.async.} =
     return await client.getContent(url)
 
 
+proc progress(total, progress, speed: BiggestInt) {.async.} =
+  echo("Downloaded ", progress, " of ", total)
+  echo("Current rate: ", speed div 100, "kb/s")
+
 proc downloadAsset(url: string): Future[string] {.async.} =
   let client = newAsyncHttpClient()
+  client.onProgressChanged = progress
   let future = client.get(url)
   yield future
   if future.failed:
