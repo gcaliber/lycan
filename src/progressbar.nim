@@ -75,9 +75,6 @@ proc print(pb: ProgressBar) =
 
   pb.tb.write(pb.X, pb.Y, pb.leftDelim & completeBar & incompleteBar & pb.rightDelim & " " & percentage)
 
-  # write(pb.output, "\r" & pb.leftDelim & completeBar & incompleteBar & pb.rightDelim & " " & percentage)
-  # flushFile(pb.output)
-
   # if isComplete:
   #   pb.output.writeLine("")
 

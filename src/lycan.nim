@@ -8,7 +8,7 @@ import std/os
 import std/parseopt
 import std/re
 import std/[strformat, strutils]
-#test
+
 import zip/zipfiles
 when not defined(release):
   import print
@@ -55,15 +55,10 @@ proc loadInstalledAddons(filename: string): seq[Addon] =
     addons.add(addon.to(Addon))
   return addons
 
-# proc exitProc() {.noconv.} =
-#   illwillDeinit()
-#   showCursor()
-#   quit(0)
-
-# illwillInit(fullscreen=false)
-# setControlCHook(exitProc)
-# hideCursor()
-# var tb = newTerminalBuffer(terminalWidth(), terminalHeight())
+proc exitProc() {.noconv.} =
+  illwillDeinit()
+  showCursor()
+  quit(0)
 
 let configJson = parseJson(readFile("test/lycan.json"))
 let flavor = configJson["flavor"].getStr()
@@ -453,6 +448,11 @@ case command
   of pin: echo "TODO pin"
   of unpin: echo "TODO unpin"
   of restore: echo "TODO restore"
+
+illwillInit(fullscreen=false)
+setControlCHook(exitProc)
+hideCursor()
+var tb = newTerminalBuffer(terminalWidth(), terminalHeight())
 
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
 # addons folder is <WoW>\_retail_\Interface\AddOns
