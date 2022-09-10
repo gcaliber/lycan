@@ -1,1 +1,1 @@
-[{"id":1,"project":"24608","name":"Hekili Priority Helper","source":"WOWINT","version":"v9.2.5-1.0.10","directories":["Hekili"]}]
+[{"id":1,"project":"tukui","branch":"","name":"Tukui","source":"TUKUI","version":"20.28","directories":["Tukui"]},{"id":2,"project":"elvui","branch":"","name":"ElvUI","source":"TUKUI","version":"12.84","directories":["ElvUI_OptionsUI","ElvUI"]},{"id":3,"project":"tullamods/Bagnon","branch":"","name":"Bagnon","source":"GITHUB","version":"7.2.3","directories":["Bagnon"]}]

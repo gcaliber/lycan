@@ -99,7 +99,12 @@ proc downloadAsset(url: string): Future[string] {.async.} =
     return ""
   else:
     let resp = future.read()
-    let filename = joinPath(config.tempDir, resp.headers["content-disposition"].split('=')[1].strip(chars = {'\'', '"'}))
+    var downloadName: string
+    try:
+      downloadName = resp.headers["content-disposition"].split('=')[1].strip(chars = {'\'', '"'})
+    except KeyError:
+      downloadName = url.split('/')[^1]
+    let filename = joinPath(config.tempDir, downloadName)
     let file = openAsync(filename, fmWrite)
     yield writeFromStream(file, resp.bodyStream)
     close(file)
@@ -121,13 +126,15 @@ proc writeInstalledAddons() =
   close(file)
 
 
-proc getAddonWithId(project: string, source: AddonSource, name: string = "", version: string = "", dirs: seq[string] = @[], branch: string = ""): Addon =
-  var newAddon = Addon(project: project, name: name, source: source, version: version, directories: dirs, id: -1)
+proc getAddonWithId(project: string, source: AddonSource, name: string = "", version: string = "", 
+                    dirs: seq[string] = @[], branch: string = "", removeDupes: bool = false): Addon =
+  var newAddon = Addon(project: project, name: name, source: source, version: version, directories: dirs, id: -1, branch: branch)
 
   for addon in config.addons:
     if addon.project == project:
       newAddon.id = addon.id
-      config.addons.delete(config.addons.find(addon))
+      if removeDupes:
+        config.addons.delete(config.addons.find(addon))
       return newAddon
   
   var ids: set[int16]
@@ -143,37 +150,45 @@ proc getAddonWithId(project: string, source: AddonSource, name: string = "", ver
       newAddon.id = id
   return newAddon
 
-# TODO: Robustness, this can fail in some situations although those shouldn't really ever happen
-proc getAddonDirs(root: string): seq[string] =
-  var addonDirs: seq[string] = @[root]
-  var n = 0
-  var tocPaths: seq[(string, string)]
-  while len(addonDirs) != 0:
-    var current = addonDirs[n]
-    for kind, path in walkDir(current):
-      if kind == pcFile:
-        let (dir, name, ext) = splitFile(path)
-        if ext == ".toc":
-          if name == lastPathPart(dir):
-            return addonDirs
-          tocPaths.add((dir, name))
-    n += 1
-    if n >= len(addonDirs):
-      n = 0
-      addonDirs = @[]
-      for kind, path in walkDir(current):
-        if kind == pcDir:
-          addonDirs.add(path)
-  # we did not find a toc file with a matching directory name
-  # so we need to rename the directory based on the best toc file found
-  # currently this just means excluding ones that contain classic names
-  for (dir, name) in tocPaths:
-    let lc = name.toLower()
-    if not (lc.contains("tbc") or lc.contains("wtolk") or lc.contains("wrath") or lc.contains("bcc") or lc.contains("classic")):
-      let parent = parentDir(dir)
-      let newPath = joinPath(parent, name)
-      moveDir(dir, newPath)
-      return @[newPath]
+
+proc processTocs(path: string): bool =
+  for kind, file in walkDir(path):
+    if kind == pcFile:
+      let (dir, name, extension) = splitFile(file)
+      if extension == ".toc":
+        if name != lastPathPart(dir):
+          let p = re("(.+)[-_](mainline|wrath|tbc|vanilla|wotlkc?|bcc|classic)", flags = {reIgnoreCase})
+          var m: array[2, string]
+          let found = find(cstring(name), p, m, 0, len(name))
+          if found != -1:
+            moveDir(dir, joinPath(parentDir(dir), m[0]))
+          else:
+            moveDir(dir, joinPath(parentDir(dir), name))
+        return true
+  return false
+
+proc getSubdirs(path: string): seq[string] =
+  var subdirs: seq[string]
+  for kind, dir in walkDir(path):
+    if kind == pcDir:
+      subdirs.add(dir)
+  return subdirs
+
+#TODO: Robustness: This doesn't handle addon authors packaging separate folders for retail/classic/wrath into a single release
+proc getAddonDirs(path: string): seq[string] =
+  var current = path
+  var firstPass = true
+  while true:
+    let toc = processTocs(current)
+    if not toc:
+      let subdirs = getSubdirs(current)
+      current = subdirs[0]
+    else:
+      if firstPass:
+        return @[current]
+      else:
+        return getSubdirs(parentDir(current))
+    firstPass = false
 
 
 proc moveAddonDirs(extractDir: string): seq[string] =
@@ -197,7 +212,8 @@ proc parseAddonArg(arg: string): Addon =
     quit()
   case urlmatch[0].toLower()
     of "github":
-      # https://github.com/Tercioo/Plater-Nameplates
+      # https://github.com/Tercioo/Plater-Nameplates/tree/master
+
       # https://api.github.com/repos/Tercioo/Plater-Nameplates/releases/latest
       let p = re"^(.+\/.+)\/tree\/(.+)"
       var m: array[2, string]
@@ -211,13 +227,13 @@ proc parseAddonArg(arg: string): Addon =
       # https://gitlab.com/api/v4/projects/siebens%2Flegacy%2Fautoactioncam/releases
       return getAddonWithId(urlmatch[1], GITLAB)
     of "tukui":
+      # https://www.tukui.org/download.php?ui=tukui
+      # https://www.tukui.org/addons.php?id=209
       let p = re"^(?:download|addons)\.php\?(?:ui|id)=(.*)"
       var m: array[1, string]
       discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
-      #return (m[0], TUKUI)
       return getAddonWithId(m[0], TUKUI)
     of "wowinterface":
-      # https://api.mmoui.com/v3/game/WOW/filedetails/{project}.json
       # https://api.mmoui.com/v3/game/WOW/filedetails/24608.json
       # https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
       let p = re"^downloads\/info(\d*)-"
@@ -301,14 +317,20 @@ proc getUpdateData(addon: Addon): Future[UpdateData] {.async.} =
   if future.failed:
     return UpdateData(addon: addon, needed: false, url: "", version: "", filename: "")
   else:
-    let json = parseJson(future.read())
+    var json = parseJson(future.read())
+    if addon.source == TUKUI and addon.project != "tukui" and addon.project != "elvui":
+      for item in json:
+        if item["id"].getStr() == addon.project:
+          json = item
     let version = getVersion(json, addon.source)
-    return UpdateData(addon: addon,
-                      needed: version != addon.version,
-                      url: getDownloadUrl(json, addon.project, addon.source),
-                      version: version,
-                      name: getPrettyName(json, addon.project, addon.source),
-                      filename: "")
+    return UpdateData(
+      addon: addon,
+      needed: version != addon.version,
+      url: getDownloadUrl(json, addon.project, addon.source),
+      version: version,
+      name: getPrettyName(json, addon.project, addon.source),
+      filename: ""
+    )
 
 
 proc getUpdatedFiles(addons: seq[Addon]): Future[seq[UpdateData]] {.async.} =
@@ -336,8 +358,15 @@ proc installAddons(addons: seq[Addon]) =
     let extractDir = joinPath(dir, name)
     unzip(data.filename, extractDir)
     let addonDirs = moveAddonDirs(extractDir)
-
-    config.addons.add(getAddonWithId(data.addon.project, data.addon.source, name = data.name, version = data.version, dirs = addonDirs))
+    config.addons.add(getAddonWithId(
+      data.addon.project, 
+      data.addon.source, 
+      branch = data.addon.branch, 
+      name = data.name, 
+      version = data.version, 
+      dirs = addonDirs,
+      removeDupes = true
+    ))
   writeInstalledAddons()
   
 
