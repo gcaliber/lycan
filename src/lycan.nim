@@ -19,6 +19,8 @@ import progressbar
 type
   AddonSource = enum
     GITHUB, GITHUB_REPO, GITLAB, TUKUI, WOWINT
+  Action = enum
+    INSTALL, REMOVE, UPDATE, NONE
 
   Addon = object
     id: int16
@@ -31,23 +33,23 @@ type
   
   UpdateData = object
     addon: Addon
-    needed: bool
+    action: Action
     url: string
-    version: string
-    name: string
+    json: Future[JsonNode]
     filename: string
+    id: int
     pb: ProgressBar
 
   Config = object
     flavor: string
     tempDir: string
     addonDir: string
-    installedAddonsJson: string
+    datafile: string
+    tukuiCache: JsonNode
     addons: seq[Addon]
-    tukuiCache: string
-    updates: seq[UpdateData]
+    # updates: seq[UpdateData]
 
-proc loadInstalledAddons(filename: string): seq[Addon] =
+proc parseInstalledAddons(filename: string): seq[Addon] =
   if not fileExists(filename):
     return @[]
   let addonsJson = parseJson(readFile(filename))
@@ -63,25 +65,52 @@ proc exitProc() {.noconv.} =
 
 let configJson = parseJson(readFile("test/lycan.json"))
 let flavor = configJson["flavor"].getStr()
-let installedFile = configJson[flavor]["installedAddons"].getStr()
+let datafile = configJson[flavor]["installedAddons"].getStr()
 var config = Config(
   flavor: flavor,
   tempDir: getTempDir(),
   addonDir: configJson[flavor]["addonDir"].getStr(),
-  installedAddonsJson: installedFile,
-  addons: loadInstalledAddons(installedFile)
+  datafile: datafile,
+  addons: parseInstalledAddons(datafile)
 )
 
-proc newUpdateData(addon: Addon, needed: bool = false, url: string = "", version: string = "", name: string = "", filename: string = "", pb: ProgressBar = nil): UpdateData =
+proc newUpdateData(addon: Addon, action: Action = NONE, url: string = "", filename: string = "", pb: ProgressBar = nil): UpdateData =
   result = UpdateData(
     addon: addon,
-    needed: false,
+    action: action,
     url: url,
-    version: version,
-    name: name,
     filename: filename,
     pb: pb
   )
+
+proc newAddon(project: string, source: AddonSource, name: string = "", version: string = "", 
+              dirs: seq[string] = @[], branch: string = ""): Addon =
+  result = Addon(
+    project: project,
+    name: name, 
+    source: source, 
+    version: version, 
+    directories: dirs, 
+    branch: branch)
+
+  for addon in config.addons:
+    if addon.project == project:
+      result.id = addon.id
+      # if removeDupes:
+      #   config.addons.delete(config.addons.find(addon))
+      return result
+  
+  var ids: set[int16]
+  if result.id == 0:
+    for addon in config.addons:
+      incl(ids, addon.id)
+  
+  var id: int16 = 1
+  while result.id == 0:
+    if id in ids:
+      id += 1
+    else:
+      result.id = id
 
 
 proc getLatestUrl(project: string, source: AddonSource, branch: string = "master"): string =
@@ -102,12 +131,14 @@ proc getLatestUrl(project: string, source: AddonSource, branch: string = "master
       return fmt"https://api.github.com/repos/{project}/commits/{branch}"
 
 
-proc getLatestJson(addon: Addon): Future[string] {.async.} =
+proc getLatestJson(update: var UpdateData) {.async.} =
+  let addon = update.addon
   let url = getLatestUrl(addon.project, addon.source)
   if addon.source == TUKUI and addon.project != "elvui" and addon.project != "tukui":
-    if config.tukuiCache == "":
+    if config.tukuiCache.isNil:
       let client = newAsyncHttpClient()
-      config.tukuiCache = await client.getContent(url)
+      let cache = await client.getContent(url)
+      let json = parseJson(cache)
     return config.tukuiCache
   else:
     let client = newAsyncHttpClient()
@@ -236,7 +267,7 @@ proc moveAddonDirs(extractDir: string): seq[string] =
 
 # TODO: Robustness: Verify this is actually a valid source. Currently we just fail
 # somewhere else if it is not and so don't report a very good error message.
-proc parseAddonArg(arg: string): Addon =
+proc parseAddon(arg: string): Addon =
   var urlmatch: array[2, string]
   let pattern = re"^(?:https?:\/\/)?(?:www\.)?(.*)\.(?:com|org)\/(.*[^\/\n])"
   var found = find(arg, pattern, urlmatch, 0, len(arg))
@@ -420,7 +451,7 @@ type
     install, remove, update, list, pin, unpin, restore
 
 var command: Command = update
-var arg: string
+var args: seq[string]
 for kind, key, val in opt.getopt():
   case kind
   of cmdShortOption, cmdLongOption:
@@ -434,7 +465,7 @@ for kind, key, val in opt.getopt():
         of "l", "list": command = list
         else: displayHelp()
     else:
-      arg = val
+      args.add(val)
       case key:
         of "add", "install": command = install
         of "remove": command = remove
@@ -444,24 +475,32 @@ for kind, key, val in opt.getopt():
         else: displayHelp()
   of cmdArgument:
     # echo "cmd ", "'", key, "'"
-    arg = key
+    args.add(key)
   else: displayHelp()
 
+var updates: seq[UpdateData]
 case command
   of install:
-    let addon = parseAddonArg(arg)
-    installAddons(@[addon])
+    for arg in args:
+      var addon = parseAddon(arg)
+      updates.add(newUpdateData(addon, action = INSTALL))
   of remove:
-    if len(arg) > 4:
-      removeAddon(arg)
-    else:
-      removeAddon(int16(parseInt(arg)))
+    for arg in args:
+      var addon = parseAddon(arg)
+      updates.add(newUpdateData(addon, action = REMOVE))
   of update:
-    installAddons(config.addons)
+    for addon in config.addons:
+      updates.add(newUpdateData(addon, action = UPDATE))
   of list: echo "TODO list"
   of pin: echo "TODO pin"
   of unpin: echo "TODO unpin"
   of restore: echo "TODO restore"
+
+for update in updates:
+  case update.action
+  of INSTALL:
+    update.getLatestJson()
+
 
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
 # addons folder is <WoW>\_retail_\Interface\AddOns
