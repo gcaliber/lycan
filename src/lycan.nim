@@ -36,6 +36,7 @@ type
     version: string
     name: string
     filename: string
+    pb: ProgressBar
 
   Config = object
     flavor: string
@@ -63,12 +64,24 @@ proc exitProc() {.noconv.} =
 let configJson = parseJson(readFile("test/lycan.json"))
 let flavor = configJson["flavor"].getStr()
 let installedFile = configJson[flavor]["installedAddons"].getStr()
-var config = Config(flavor: flavor,
-                    tempDir: getTempDir(),
-                    addonDir: configJson[flavor]["addonDir"].getStr(),
-                    installedAddonsJson: installedFile,
-                    addons: loadInstalledAddons(installedFile),
-                    tukuiCache: "")
+var config = Config(
+  flavor: flavor,
+  tempDir: getTempDir(),
+  addonDir: configJson[flavor]["addonDir"].getStr(),
+  installedAddonsJson: installedFile,
+  addons: loadInstalledAddons(installedFile)
+)
+
+proc newUpdateData(addon: Addon, needed: bool = false, url: string = "", version: string = "", name: string = "", filename: string = "", pb: ProgressBar = nil): UpdateData =
+  result = UpdateData(
+    addon: addon,
+    needed: false,
+    url: url,
+    version: version,
+    name: name,
+    filename: filename,
+    pb: pb
+  )
 
 
 proc getLatestUrl(project: string, source: AddonSource, branch: string = "master"): string =
@@ -101,24 +114,30 @@ proc getLatestJson(addon: Addon): Future[string] {.async.} =
     return await client.getContent(url)
 
 
-proc progress(total, progress, speed: BiggestInt) {.async.} =
-  echo("Downloaded ", progress, " of ", total)
-  echo("Current rate: ", speed div 100, "kb/s")
+illwillInit(fullscreen=false)
+setControlCHook(exitProc)
+hideCursor()
+var tb = newTerminalBuffer(terminalWidth(), terminalHeight())
 
-proc downloadAsset(url: string): Future[string] {.async.} =
+
+
+proc downloadAsset(update: UpdateData): Future[string] {.async.} =
   let client = newAsyncHttpClient()
-  client.onProgressChanged = progress
-  let future = client.get(url)
+  client.onProgressChanged = proc(total, progress, speed: BiggestInt) {.async.} =
+    var update = update
+    update.pb.set(toInt int(total) / int(progress) * 100.00)
+  
+  let future = client.get(update.url)
   yield future
   if future.failed:
-    return ""
+    return "EMPTY"
   else:
     let resp = future.read()
     var downloadName: string
     try:
       downloadName = resp.headers["content-disposition"].split('=')[1].strip(chars = {'\'', '"'})
     except KeyError:
-      downloadName = url.split('/')[^1]
+      downloadName = update.url.split('/')[^1]
     let filename = joinPath(config.tempDir, downloadName)
     let file = openAsync(filename, fmWrite)
     yield writeFromStream(file, resp.bodyStream)
@@ -141,29 +160,28 @@ proc writeInstalledAddons() =
   close(file)
 
 
-proc getAddonWithId(project: string, source: AddonSource, name: string = "", version: string = "", 
-                    dirs: seq[string] = @[], branch: string = "", removeDupes: bool = false): Addon =
-  var newAddon = Addon(project: project, name: name, source: source, version: version, directories: dirs, id: -1, branch: branch)
+proc newAddon(project: string, source: AddonSource, name: string = "", version: string = "", 
+              dirs: seq[string] = @[], branch: string = "", removeDupes: bool = false): Addon =
+  result = Addon(project: project, name: name, source: source, version: version, directories: dirs, id: -1, branch: branch)
 
   for addon in config.addons:
     if addon.project == project:
-      newAddon.id = addon.id
+      result.id = addon.id
       if removeDupes:
         config.addons.delete(config.addons.find(addon))
-      return newAddon
+      return result
   
   var ids: set[int16]
-  if newAddon.id == -1:
+  if result.id == -1:
     for addon in config.addons:
       incl(ids, addon.id)
   
   var id: int16 = 1
-  while newAddon.id == -1:
+  while result.id == -1:
     if id in ids:
       id += 1
     else:
-      newAddon.id = id
-  return newAddon
+      result.id = id
 
 
 proc processTocs(path: string): bool =
@@ -234,27 +252,27 @@ proc parseAddonArg(arg: string): Addon =
       var m: array[2, string]
       found = find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
       if found == -1:
-        return getAddonWithId(urlmatch[1], GITHUB)
+        return newAddon(urlmatch[1], GITHUB)
       else:
-        return getAddonWithId(m[0], GITHUB_REPO, branch = m[1])
+        return newAddon(m[0], GITHUB_REPO, branch = m[1])
     of "gitlab":
       # https://gitlab.com/siebens/legacy/autoactioncam
       # https://gitlab.com/api/v4/projects/siebens%2Flegacy%2Fautoactioncam/releases
-      return getAddonWithId(urlmatch[1], GITLAB)
+      return newAddon(urlmatch[1], GITLAB)
     of "tukui":
       # https://www.tukui.org/download.php?ui=tukui
       # https://www.tukui.org/addons.php?id=209
       let p = re"^(?:download|addons)\.php\?(?:ui|id)=(.*)"
       var m: array[1, string]
       discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
-      return getAddonWithId(m[0], TUKUI)
+      return newAddon(m[0], TUKUI)
     of "wowinterface":
       # https://api.mmoui.com/v3/game/WOW/filedetails/24608.json
       # https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
       let p = re"^downloads\/info(\d*)-"
       var m: array[1, string]
       discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
-      return getAddonWithId(m[0], WOWINT)
+      return newAddon(m[0], WOWINT)
 
 
 proc removeAddon(n: int16) = 
@@ -330,7 +348,7 @@ proc getUpdateData(addon: Addon): Future[UpdateData] {.async.} =
   let future = getLatestJson(addon)
   yield future
   if future.failed:
-    return UpdateData(addon: addon, needed: false, url: "", version: "", filename: "")
+    return newUpdateData(addon)
   else:
     var json = parseJson(future.read())
     if addon.source == TUKUI and addon.project != "tukui" and addon.project != "elvui":
@@ -338,42 +356,38 @@ proc getUpdateData(addon: Addon): Future[UpdateData] {.async.} =
         if item["id"].getStr() == addon.project:
           json = item
     let version = getVersion(json, addon.source)
-    return UpdateData(
-      addon: addon,
-      needed: version != addon.version,
-      url: getDownloadUrl(json, addon.project, addon.source),
-      version: version,
-      name: getPrettyName(json, addon.project, addon.source),
-      filename: ""
+    return newUpdateData(
+      addon,
+      needed = version != addon.version,
+      url = getDownloadUrl(json, addon.project, addon.source),
+      version = version,
+      name = getPrettyName(json, addon.project, addon.source),
+      pb = newProgressBar(tb, 0, len(config.updates))
     )
-
-
-proc getUpdatedFiles(addons: seq[Addon]): Future[seq[UpdateData]] {.async.} =
+    
+proc getUpdatedFiles(addons: seq[Addon]) {.async.} =
   var futureUpdates: seq[Future[UpdateData]]
   for addon in addons:
     futureUpdates.add(getUpdateData(addon))
 
-  var updates: seq[UpdateData]
   for future in futureUpdates:
     yield future
     var update = future.read()
+    config.updates.add(update)
     if update.needed:
-      let filename = downloadAsset(update.url)
-      yield filename
-      update.filename = filename.read()
-      updates.add(update)
-
-  return updates
-
+      let filename = await downloadAsset(update)
+      # yield filename
+      update.filename = filename
+      print update.filename
 
 proc installAddons(addons: seq[Addon]) =
-  let updates = waitFor getUpdatedFiles(addons)
-  for data in updates:
+  waitFor getUpdatedFiles(addons)
+  for data in config.updates:
     let (dir, name, _) = splitFile(data.filename)
     let extractDir = joinPath(dir, name)
     unzip(data.filename, extractDir)
     let addonDirs = moveAddonDirs(extractDir)
-    config.addons.add(getAddonWithId(
+    config.addons.add(newAddon(
       data.addon.project, 
       data.addon.source, 
       branch = data.addon.branch, 
@@ -448,11 +462,6 @@ case command
   of pin: echo "TODO pin"
   of unpin: echo "TODO unpin"
   of restore: echo "TODO restore"
-
-illwillInit(fullscreen=false)
-setControlCHook(exitProc)
-hideCursor()
-var tb = newTerminalBuffer(terminalWidth(), terminalHeight())
 
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
 # addons folder is <WoW>\_retail_\Interface\AddOns
