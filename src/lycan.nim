@@ -25,7 +25,7 @@ type
   AddonSource = enum
     GITHUB, GITHUB_REPO, GITLAB, TUKUI, WOWINT
 
-  Addon = object
+  Addon = ref object
     id: int16
     project: string
     branch: string
@@ -34,7 +34,7 @@ type
     version: string
     dirs: seq[string]
   
-  UpdateData = object
+  UpdateData = ref object
     addon: Addon
     action: Action
     url: string
@@ -83,7 +83,6 @@ proc parseInstalledAddons(filename: string): seq[Addon] =
   return addons
 
 
-
 let configJson = parseJson(readFile("test/lycan.json"))
 let flavor = configJson["flavor"].getStr()
 let datafile = configJson[flavor]["installedAddons"].getStr()
@@ -96,27 +95,29 @@ var config = Config(
   updateCount: 0
 )
 
+
 proc newUpdateData(addon: Addon, action: Action, url: string = "", filename: string = "", pb: ProgressBar = nil): UpdateData =
-  result = UpdateData(
-    addon: addon,
-    action: action,
-    url: url,
-    filename: filename,
-    id: config.updateCount,
-    pb: pb
-  )
+  var ud = new(UpdateData)
+  ud.addon = addon
+  ud.action = action
+  ud.url = url
+  ud.filename = filename
+  ud.id = config.updateCount
+  ud.pb = pb
   config.updateCount += 1
+  result = ud
+
 
 proc newAddon(project: string, source: AddonSource, name: string = "", version: string = "", 
               dirs: seq[string] = @[], branch: string = ""): Addon =
-  result = Addon(
-    project: project,
-    name: name, 
-    source: source, 
-    version: version, 
-    dirs: dirs, 
-    branch: branch
-  )
+  var a = new(Addon)
+  a.project = project
+  a.name = name
+  a.source = source
+  a.version = version
+  a.dirs = dirs
+  a.branch = branch
+  result = a
 
   for addon in config.addons:
     if addon.project == project:
@@ -330,7 +331,7 @@ proc deleteInstalled(addon: Addon) =
       a.removeDirs()
       config.addons.delete(config.addons.find(a))
 
-proc install(update: var UpdateData) =
+proc install(update: UpdateData) =
   var z: ZipArchive
   if not z.open(update.filename):
     report(&"Extracting {update.filename} failed")
@@ -342,7 +343,7 @@ proc install(update: var UpdateData) =
   update.addon.dirs = moveAddonDirs(extractDir)
 
 
-proc download(update: var UpdateData) {.async.} =
+proc download(update: UpdateData) {.async.} =
   let client = newAsyncHttpClient()
   when defined(progress):
     client.onProgressChanged = proc(total, progress, speed: BiggestInt) {.async.} =
@@ -370,7 +371,7 @@ proc download(update: var UpdateData) {.async.} =
       close(file)
 
 
-proc setDownloadUrl(update: var UpdateData, json: JsonNode) =
+proc setDownloadUrl(update: UpdateData, json: JsonNode) =
   case update.addon.source
   of GITHUB:
     let assets = json["assets"]
@@ -412,7 +413,7 @@ proc getLatestUrl(addon: Addon): string =
     of GITHUB_REPO:
       return &"https://api.github.com/repos/{addon.project}/commits/{addon.branch}"
 
-proc getUpdateInfo(update: var UpdateData) {.async.} =
+proc getUpdateInfo(update: UpdateData) {.async.} =
   let addon = update.addon
   let url = addon.getLatestUrl()
   var json: JsonNode
@@ -437,8 +438,8 @@ proc getUpdateInfo(update: var UpdateData) {.async.} =
     update.action = none
 
 
-proc process(updates: var seq[UpdateData]) {.async.} =
-  for update in updates.mitems:
+proc process(updates: seq[UpdateData]) {.async.} =
+  for update in updates:
     case update.action
     of install:
       await update.getUpdateInfo()
