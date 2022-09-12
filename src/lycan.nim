@@ -21,7 +21,7 @@ else:
 
 type
   Action = enum
-    install, remove, list, pin, unpin, restore, none
+    doInstall, doUpdate, doRemove, doList, doPin, doUnpin, doRestore, doNothing
   AddonSource = enum
     GITHUB, GITHUB_REPO, GITLAB, TUKUI, WOWINT
 
@@ -181,72 +181,24 @@ proc parseAddon(arg: string): Addon =
       return newAddon(m[0], WOWINT)
 
 
-proc removeAddon(n: int16) = 
-  for addon in config.addons:
-    if addon.id == n:
-      for dir in addon.dirs:
-        removeDir(joinPath(config.addonDir, dir))
-      config.addons.delete(config.addons.find(addon))
-      writeInstalledAddons()
-      return
-  echo &"Error: No installed addon with id \"{n}\""
-
-proc removeAddon(project: string) = 
-  for addon in config.addons:
-    if addon.project == project:
-      removeAddon(addon.id)
-      return
-  echo &"Error: \"{project}\" not found"
-
-
-
-
 proc displayHelp() =
   echo "  -u, --update                 Update installed addons"
   echo "  -i, --install <arg>          Install an addon where <arg> is the url"
   echo "  -a, --add <arg>              Same as --install"
-  echo "  -r, --remove <arg>           Remove an installed addon where <arg> is the id# or project"
+  echo "  -r, --remove <addon id#>     Remove an installed addon where <arg> is the id# or project"
   echo "  -l, --list                   List installed addons"
-  echo "      --clone <branch>         Install from github as a clone of <branch> instead of a release, defaults to master"
   echo "      --pin <addon id#>        Pin an addon at the current version, do not update"
   echo "      --unpin <addon id#>      Unpin an addon, resume updates"
   echo "      --restore <addon id#>    Restore addon to last backed up version and pin it"
   quit()
 
-var opt = initOptParser(commandLineParams(), 
-                        shortNoVal = {'h', 'l', 'u', 'i', 'a'}, 
-                        longNoVal = @["help", "list", "update"])
+var opt = initOptParser(
+  commandLineParams(), 
+  shortNoVal = {'h', 'l', 'u', 'i', 'a'}, 
+  longNoVal = @["help", "list", "update"]
+)
 
-var action: Action = install
-var args: seq[string]
-for kind, key, val in opt.getopt():
-  case kind
-  of cmdShortOption, cmdLongOption:
-    # echo "key ", key
-    # echo "val ", "'", val, "'"
-    if val == "":
-      case key:
-        of "h", "help": displayHelp()
-        of "a", "i": action = install
-        of "r": action = remove
-        of "l", "list": action = list
-        else: displayHelp()
-    else:
-      args.add(val)
-      case key:
-        of "add", "install": action = install
-        of "remove": action = remove
-        of "pin": action = pin
-        of "unpin": action = unpin
-        of "restore": action = restore
-        else: displayHelp()
-  of cmdArgument:
-    # echo "cmd ", "'", key, "'"
-    args.add(key)
-  else: displayHelp()
-
-
-proc setName(addon: var Addon, json: JsonNode) =
+proc setName(addon: Addon, json: JsonNode) =
   case addon.source
   of GITHUB, GITHUB_REPO, GITLAB:
     addon.name = addon.project.split('/')[^1]
@@ -255,7 +207,7 @@ proc setName(addon: var Addon, json: JsonNode) =
   of WOWINT:
     addon.name = json[0]["UIName"].getStr()
 
-proc setVersion(addon: var Addon, json: JsonNode) =
+proc setVersion(addon: Addon, json: JsonNode) =
   case addon.source
   of GITHUB:
     let v = json["tag_name"].getStr()
@@ -269,7 +221,6 @@ proc setVersion(addon: var Addon, json: JsonNode) =
     addon.version = json[0]["UIVersion"].getStr()
   of GITHUB_REPO:
     addon.version = json["sha"].getStr()
-
 
 
 proc processTocs(path: string): bool =
@@ -341,6 +292,7 @@ proc install(update: UpdateData) =
   z.extractAll(extractDir)
   update.addon.deleteInstalled()
   update.addon.dirs = moveAddonDirs(extractDir)
+  config.addons.add(update.addon)
 
 
 proc download(update: UpdateData) {.async.} =
@@ -385,9 +337,9 @@ proc setDownloadUrl(update: UpdateData, json: JsonNode) =
     else:
       update.url = json["zipball_url"].getStr()
   of GITLAB:
-    for source in json[0]["assets"]["sources"]:
-      if source["format"].getStr() == "zip":
-        update.url = source["url"].getStr()
+    for s in json[0]["assets"]["sources"]:
+      if s["format"].getStr() == "zip":
+        update.url = s["url"].getStr()
   of TUKUI:
     update.url = json["url"].getStr()
   of WOWINT:
@@ -430,35 +382,89 @@ proc getUpdateInfo(update: UpdateData) {.async.} =
   
   let currentVersion = update.addon.version
   update.addon.setVersion(json)
-  if update.addon.version != currentVersion:
-    update.action = install
+  if update.addon.version == currentVersion:
+    update.action = doNothing
+  else:
     update.setDownloadUrl(json)
     update.addon.setName(json)
-  else:
-    update.action = none
+
+proc findInstalledAddon(n: int16): Addon = 
+  for addon in config.addons:
+    if addon.id == n:
+      return addon
+  return nil
 
 
 proc process(updates: seq[UpdateData]) {.async.} =
   for update in updates:
     case update.action
-    of install:
+    of doInstall, doUpdate:
       await update.getUpdateInfo()
-      if update.action == install:
+      if update.action != doNothing:
         await update.download()
         update.install()
-    of remove:echo "TODO list"
-    of list: echo "TODO list"
-    of pin: echo "TODO pin"
-    of unpin: echo "TODO unpin"
-    of restore: echo "TODO restore"
-    of none: discard
+    of doRemove:
+      update.addon.deleteInstalled()
+    of doPin: echo "TODO pin"
+    of doUnpin: echo "TODO unpin"
+    of doRestore: echo "TODO restore"
+    of doList, doNothing: discard
+
+var action: Action = doUpdate
+var args: seq[string]
+for kind, key, val in opt.getopt():
+  case kind
+  of cmdShortOption, cmdLongOption:
+    if val == "":
+      case key:
+        of "h", "help": displayHelp()
+        of "a", "i": action = doInstall
+        of "u": action = doUpdate
+        of "r": action = doRemove
+        of "l", "list": action = doList
+        else: displayHelp()
+    else:
+      args.add(val)
+      case key:
+        of "add", "install": action = doInstall
+        of "remove": action = doRemove
+        of "pin": action = doPin
+        of "unpin": action = doUnpin
+        of "restore": action = doRestore
+        else: displayHelp()
+  of cmdArgument:
+    args.add(key)
+  else: displayHelp()
 
 var updates: seq[UpdateData]
-for arg in args:
-  var addon = parseAddon(arg)
-  updates.add(newUpdateData(addon, action))
+case action
+  of doInstall:
+    for arg in args:
+      var addon = parseAddon(arg)
+      if addon != nil:
+        updates.add(newUpdateData(addon, action))
+  of doUpdate:
+    for addon in config.addons:
+      updates.add(newUpdateData(addon, action))
+  of doRemove: 
+    for arg in args:
+      try:
+        let id = int16(parseInt(arg))
+        var addon = findInstalledAddon(id)
+        if addon != nil:
+          updates.add(newUpdateData(addon, action))
+        else:
+          report &"ID {arg} is not installed"
+      except:
+        report &"ID {arg} is not installed"
+  of doPin: echo "TODO pin"
+  of doUnpin: echo "TODO unpin"
+  of doRestore: echo "TODO restore"
+  of doList: echo "TODO list"
+  of doNothing: discard
 
 waitFor updates.process()
+writeInstalledAddons()
 
 when defined(progress):
   exitProc()
