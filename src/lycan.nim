@@ -94,8 +94,7 @@ var config = Config(
   tempDir: getTempDir(),
   addonDir: configJson[flavor]["addonDir"].getStr(),
   datafile: datafile,
-  addons: parseInstalledAddons(datafile),
-  updateCount: 0
+  addons: parseInstalledAddons(datafile)
 )
 
 
@@ -310,7 +309,6 @@ proc download(update: UpdateData) {.async.} =
   let client = newAsyncHttpClient()
   when defined(progress):
     client.onProgressChanged = proc(total, progress, speed: BiggestInt) {.async.} =
-      var update = update
       update.pb.set(toInt(int(total) / int(progress) * 100.00))
   
   let future = client.get(update.url)
@@ -380,6 +378,11 @@ proc getUpdateInfo(update: UpdateData) {.async.} =
   let addon = update.addon
   let url = addon.getLatestUrl()
   var json: JsonNode
+
+  when defined(progress):
+    tb.write(0, update.id, &"Checking {addon.project}")
+    tb.display()
+
   if addon.source == TUKUI and addon.project != "elvui" and addon.project != "tukui":
     if config.tukuiCache.isNil:
       let client = newAsyncHttpClient()

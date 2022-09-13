@@ -30,20 +30,20 @@ proc newProgressBar*(tb: TerminalBuffer, x, y: Natural, width: Natural = 60,
   right: char = DEFAULT_RIGHT_DELIM, complete: char = DEFAULT_COMPLETE_CHAR, 
   head: char = DEFAULT_COMPLETE_HEAD, incomplete: char = DEFAULT_INCOMPLETE_CHAR
 ): ProgressBar =
-  result = ProgressBar(
-    tb: tb,
-    X: x,
-    Y: y,
-    width: width,
-    total: total,
-    step: step,
-    current: 0,
-    leftDelim: left,
-    rightDelim: right,
-    complete: complete,
-    incomplete: incomplete,
-    incompleteHead: head
-  )
+  var pb = new(ProgressBar)
+  pb.tb = tb
+  pb.X = x
+  pb.Y = y
+  pb.width = width
+  pb.total = total
+  pb.step = step
+  pb.current = 0
+  pb.leftDelim = left
+  pb.rightDelim = right
+  pb.complete = complete
+  pb.incomplete = incomplete
+  pb.incompleteHead = head
+  result = pb
 
 proc isComplete*(pb: ProgressBar): bool =
   ## Check whether the progress bar is complete.
