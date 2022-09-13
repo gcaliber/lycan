@@ -1,23 +1,5 @@
 [
   {
-    "id":1,
-    "project":"elvui",
-    "branch":"",
-    "name":"ElvUI",
-    "source":"TUKUI",
-    "version":"12.85",
-    "dirs":["ElvUI_OptionsUI", "ElvUI"]
-  },
-  {
-    "id":2,
-    "project":"Stanzilla/AdvancedInterfaceOptions",
-    "branch":"",
-    "name":"AdvancedInterfaceOptions",
-    "source":"GITHUB",
-    "version":"1.7.2",
-    "dirs":["AdvancedInterfaceOptions"]
-  },
-  {
     "id":3,
     "project":"siebens/legacy/autoactioncam",
     "branch":"",
@@ -27,12 +9,30 @@
     "dirs":["AutoActionCam"]
   },
   {
+    "id":1,
+    "project":"elvui",
+    "branch":"",
+    "name":"ElvUI",
+    "source":"TUKUI",
+    "version":"12.86",
+    "dirs":["ElvUI_OptionsUI", "ElvUI"]
+  },
+  {
     "id":4,
     "project":"Tercioo/Plater-Nameplates",
     "branch":"master",
     "name":"Plater-Nameplates",
     "source":"GITHUB_REPO",
-    "version":"ec33e20ad369af596335798a2637949febeb2b3c",
+    "version":"ebf62a9ea2e6e91e5c495507e77286c075fb4907",
     "dirs":["Plater"]
+  },
+  {
+    "id":2,
+    "project":"Stanzilla/AdvancedInterfaceOptions",
+    "branch":"",
+    "name":"AdvancedInterfaceOptions",
+    "source":"GITHUB",
+    "version":"1.7.2",
+    "dirs":["AdvancedInterfaceOptions"]
   }
 ]

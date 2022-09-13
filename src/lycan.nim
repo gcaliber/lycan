@@ -54,9 +54,6 @@ type
     updateCount: int
 
 when defined(progress):
-  import illwill
-  import progressbar
-  
   proc exitProc() {.noconv.} =
     illwillDeinit()
     showCursor()
@@ -66,13 +63,6 @@ when defined(progress):
   setControlCHook(exitProc)
   hideCursor()
   var tb = newTerminalBuffer(terminalWidth(), terminalHeight())
-
-  proc report(tb: var TerminalBuffer, msg: string) =
-    tb.write(5, 20, msg)
-    tb.display()
-else:
-  proc report(msg: string) =
-      echo &"INFO: {msg}"
 
 
 proc parseInstalledAddons(filename: string): seq[Addon] =
@@ -295,7 +285,7 @@ proc deleteInstalled(addon: Addon) =
 proc install(update: UpdateData) =
   var z: ZipArchive
   if not z.open(update.filename):
-    report(&"Extracting {update.filename} failed")
+    echo &"Extracting {update.filename} failed"
     return
   let (dir, name, _) = splitFile(update.filename)
   let extractDir = joinPath(dir, name)
@@ -307,14 +297,16 @@ proc install(update: UpdateData) =
 
 proc download(update: UpdateData) {.async.} =
   let client = newAsyncHttpClient()
+
   when defined(progress):
+    update.pb = newProgressBar(tb, 30, update.id)
     client.onProgressChanged = proc(total, progress, speed: BiggestInt) {.async.} =
-      update.pb.set(toInt(int(total) / int(progress) * 100.00))
+      update.pb.set(toInt(int(progress) / int(total) * 100.00))
   
   let future = client.get(update.url)
   yield future
   if future.failed:
-    report("download future failed")
+    echo "download future failed"
   else:
     let resp = future.read()
     var downloadName: string
@@ -327,7 +319,7 @@ proc download(update: UpdateData) {.async.} =
     let future = writeFromStream(file, resp.bodyStream)
     yield future
     if future.failed:
-      report("write file future failed")
+      echo &"write file future failed: filename={update.filename}"
     else:
       close(file)
 
@@ -408,7 +400,6 @@ proc findInstalledAddon(n: int16): Addon =
       return addon
   return nil
 
-
 proc process(updates: seq[UpdateData]) {.async.} =
   for update in updates:
     case update.action
@@ -416,6 +407,11 @@ proc process(updates: seq[UpdateData]) {.async.} =
       await update.getUpdateInfo()
       if update.action != doNothing:
         await update.download()
+        when defined(progress):
+          let future = update.download()
+          while not future.finished():
+            tb.display()
+            await sleepAsync(20)
         update.install()
     of doRemove:
       update.addon.deleteInstalled()
@@ -423,6 +419,7 @@ proc process(updates: seq[UpdateData]) {.async.} =
     of doUnpin: echo "TODO unpin"
     of doRestore: echo "TODO restore"
     of doList, doNothing: discard
+  
 
 var action: Action = doUpdate
 var args: seq[string]
@@ -468,16 +465,17 @@ case action
         if addon != nil:
           updates.add(newUpdateData(addon, action))
         else:
-          report &"ID {arg} is not installed"
+          echo &"ID {arg} is not installed"
       except:
-        report &"ID {arg} is not installed"
+        echo &"ID {arg} is not installed"
   of doPin: echo "TODO pin"
   of doUnpin: echo "TODO unpin"
   of doRestore: echo "TODO restore"
   of doList: echo "TODO list"
   of doNothing: discard
 
-waitFor updates.process()
+waitFor updates.process()  
+
 writeInstalledAddons()
 
 when defined(progress):

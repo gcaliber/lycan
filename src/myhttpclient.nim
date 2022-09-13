@@ -673,7 +673,7 @@ proc reportProgress(client: HttpClient | AsyncHttpClient,
                     progress: BiggestInt) {.multisync.} =
   client.contentProgress += progress
   client.oneSecondProgress += progress
-  if (getMonoTime() - client.lastProgressReport).inMilliseconds >= 100:
+  if (getMonoTime() - client.lastProgressReport).inMilliseconds >= 1000:
     if not client.onProgressChanged.isNil:
       await client.onProgressChanged(client.contentTotal,
                                      client.contentProgress,
