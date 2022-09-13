@@ -9,6 +9,8 @@ import std/parseopt
 import std/re
 import std/[strformat, strutils]
 
+import jsonbeautify
+
 import zip/zipfiles
 when not defined(release):
   import print
@@ -86,6 +88,7 @@ proc parseInstalledAddons(filename: string): seq[Addon] =
 let configJson = parseJson(readFile("test/lycan.json"))
 let flavor = configJson["flavor"].getStr()
 let datafile = configJson[flavor]["installedAddons"].getStr()
+
 var config = Config(
   flavor: flavor,
   tempDir: getTempDir(),
@@ -122,23 +125,27 @@ proc newAddon(project: string, source: AddonSource, name: string = "", version: 
   for addon in config.addons:
     if addon.project == project:
       result.id = addon.id
-  
-  var ids: set[int16]
-  if result.id == 0:
-    for addon in config.addons:
-      incl(ids, addon.id)
-  
-  var id: int16 = 1
-  while result.id == 0:
-    if id in ids: id += 1
-    else: result.id = id
 
+
+proc assignIds() =
+  var ids: set[int16]
+  for addon in config.addons:
+    incl(ids, addon.id)
+
+  var id: int16 = 1
+  for addon in config.addons:
+    if addon.id == 0:
+      while id in ids: id += 1
+      addon.id = id
+      incl(ids, id)
 
 proc writeInstalledAddons() =
+  assignIds()
   let addonsJson = config.addons.toJson(opt = ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
   let file = open(config.datafile, fmWrite)
   write(file, addonsJson)
   close(file)
+  jsonBeautify(config.datafile)
   
 
 # TODO: Robustness: Verify this is actually a valid source. Currently we just fail
@@ -152,6 +159,7 @@ proc parseAddon(arg: string): Addon =
     quit()
   case urlmatch[0].toLower()
     of "github":
+      # https://github.com/Stanzilla/AdvancedInterfaceOptions
       # https://github.com/Tercioo/Plater-Nameplates/tree/master
       # https://api.github.com/repos/Tercioo/Plater-Nameplates/releases/latest
       let p = re"^(.+\/.+)\/tree\/(.+)"
@@ -272,15 +280,18 @@ proc moveAddonDirs(extractDir: string): seq[string] =
     addonDirs.add(name)
   return addonDirs
 
-proc removeDirs(addon: Addon) =
+proc cleanup(addon: Addon) =
   for dir in addon.dirs:
     removeDir(dir)
 
 proc deleteInstalled(addon: Addon) =
+  var toBeDeleted: Addon = nil
   for a in config.addons:
     if a.project == addon.project:
-      a.removeDirs()
-      config.addons.delete(config.addons.find(a))
+      a.cleanup()
+      toBeDeleted = a
+  if not toBeDeleted.isNil:
+    config.addons.delete(config.addons.find(toBeDeleted))
 
 proc install(update: UpdateData) =
   var z: ZipArchive

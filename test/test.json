@@ -1,0 +1,29 @@
+[
+  {
+    "id":1,
+    "project":"elvui",
+    "branch":"",
+    "name":"ElvUI",
+    "source":"TUKUI",
+    "version":"12.85",
+    "dirs":["ElvUI_OptionsUI", "ElvUI"]
+  },
+  {
+    "id":2,
+    "project":"Stanzilla/AdvancedInterfaceOptions",
+    "branch":"",
+    "name":"AdvancedInterfaceOptions",
+    "source":"GITHUB",
+    "version":"1.7.2",
+    "dirs":["AdvancedInterfaceOptions"]
+  },
+  {
+    "id":3,
+    "project":"Tercioo/Plater-Nameplates",
+    "branch":"master",
+    "name":"Plater-Nameplates",
+    "source":"GITHUB_REPO",
+    "version":"ec33e20ad369af596335798a2637949febeb2b3c",
+    "dirs":["Plater"]
+  }
+]
