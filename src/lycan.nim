@@ -316,12 +316,12 @@ proc download(update: UpdateData) {.async.} =
       downloadName = update.url.split('/')[^1]
     update.filename = joinPath(config.tempDir, downloadName)
     let file = openAsync(update.filename, fmWrite)
-    let future = writeFromStream(file, resp.bodyStream)
+    # let future = writeFromStream(file, resp.bodyStream)
+    let future = write(file, await resp.body)
     yield future
     if future.failed:
       echo &"write file future failed: filename={update.filename}"
-    else:
-      close(file)
+    close(file)
 
 
 proc setDownloadUrl(update: UpdateData, json: JsonNode) =
@@ -400,26 +400,45 @@ proc findInstalledAddon(n: int16): Addon =
       return addon
   return nil
 
-proc process(updates: seq[UpdateData]) {.async.} =
-  for update in updates:
-    case update.action
-    of doInstall, doUpdate:
-      await update.getUpdateInfo()
-      if update.action != doNothing:
-        await update.download()
-        when defined(progress):
-          let future = update.download()
-          while not future.finished():
-            tb.display()
-            await sleepAsync(20)
-        update.install()
-    of doRemove:
-      update.addon.deleteInstalled()
-    of doPin: echo "TODO pin"
-    of doUnpin: echo "TODO unpin"
-    of doRestore: echo "TODO restore"
-    of doList, doNothing: discard
-  
+
+when defined(progress):
+  proc updateDisplay() {.async.} =
+    while true:
+      tb.display()
+      await sleepAsync(100)
+
+  proc process(updates: seq[UpdateData]) {.async.} =
+    for update in updates:
+      case update.action
+      of doInstall, doUpdate:
+        await update.getUpdateInfo()
+        if update.action != doNothing:
+          await update.download()
+          update.install()
+      of doRemove:
+        update.addon.deleteInstalled()
+      of doPin: echo "TODO pin"
+      of doUnpin: echo "TODO unpin"
+      of doRestore: echo "TODO restore"
+      of doList, doNothing: discard
+    
+else:
+  proc process(updates: seq[UpdateData]) {.async.} =
+    for update in updates:
+      case update.action
+      of doInstall, doUpdate:
+        await update.getUpdateInfo()
+        if update.action != doNothing:
+          await update.download()
+          update.install()
+      of doRemove:
+        update.addon.deleteInstalled()
+      of doPin: echo "TODO pin"
+      of doUnpin: echo "TODO unpin"
+      of doRestore: echo "TODO restore"
+      of doList, doNothing: discard
+
+
 
 var action: Action = doUpdate
 var args: seq[string]
@@ -474,9 +493,11 @@ case action
   of doList: echo "TODO list"
   of doNothing: discard
 
+when defined(progress):
+  asyncCheck updateDisplay()
 waitFor updates.process()  
 
-writeInstalledAddons()
+# writeInstalledAddons()
 
 when defined(progress):
   exitProc()

@@ -75,9 +75,6 @@ proc print(pb: ProgressBar) =
 
   pb.tb.write(pb.X, pb.Y, pb.leftDelim & completeBar & incompleteBar & pb.rightDelim & " " & percentage)
 
-  # if isComplete:
-  #   pb.output.writeLine("")
-
 proc start*(pb: ProgressBar) =
   ## Start the progress bar. This will write the empty (0%) bar to the screen, which may not always be desired.
   if pb.current == 0:
