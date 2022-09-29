@@ -4,7 +4,7 @@
     "project":"siebens/legacy/autoactioncam",
     "branch":"",
     "name":"autoactioncam",
-    "source":"GITLAB",
+    "source":"Gitlab",
     "version":"1.4",
     "dirs":["AutoActionCam"]
   },
@@ -13,7 +13,7 @@
     "project":"elvui",
     "branch":"",
     "name":"ElvUI",
-    "source":"TUKUI",
+    "source":"Tukui",
     "version":"186",
     "dirs":["ElvUI_OptionsUI", "ElvUI"]
   },
@@ -22,7 +22,7 @@
     "project":"Tercioo/Plater-Nameplates",
     "branch":"master",
     "name":"Plater-Nameplates",
-    "source":"GITHUB_REPO",
+    "source":"GithubRepo",
     "version":"ebf62a9ea6e91e5c495507e77286c075fb4907",
     "dirs":["Plater"]
   },
@@ -31,7 +31,7 @@
     "project":"Stanzilla/AdvancedInterfaceOptions",
     "branch":"",
     "name":"AdvancedInterfaceOptions",
-    "source":"GITHUB",
+    "source":"Github",
     "version":"1.2",
     "dirs":["AdvancedInterfaceOptions"]
   }
