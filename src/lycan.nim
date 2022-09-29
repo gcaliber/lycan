@@ -14,8 +14,6 @@ import config
 import addon
 import types
 
-
-
 # proc assignIds() =
 #   var ids: set[int16]
 #   for addon in config.addons:

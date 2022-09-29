@@ -14,32 +14,7 @@ import std/[
 import zip/zipfiles
 
 import config
-
 import types
-
-# type
-#   Action* = enum
-#     doInstall, doUpdate, doRemove, doList, doPin, doUnpin, doRestore, doNothing
-
-#   AddonKind* = enum
-#     Github,
-#     GithubRepo,
-#     Gitlab,
-#     TukuiMain,
-#     TukuiAddon,
-#     Wowint,
-
-#   Addon* = ref object
-#     project: string
-#     branch: Option[string]
-#     name: string
-#     kind: AddonKind
-#     version: string
-#     id: int16
-#     dirs: seq[string]
-#     downloadUrl: string
-#     filename: string
-#     extractDir: string
 
 proc `==`(a, b: Addon): bool {.inline.} =
   a.project == b.project
