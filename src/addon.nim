@@ -1,24 +1,22 @@
 import print
 
-import std/[
-  asyncdispatch,
-  asyncfile,
-  httpclient,
-  options,
-  os,
-  re,
-  strformat,
-  strutils,
-  json]
+import std/asyncdispatch
+import std/httpclient
+import std/options
+import std/os
+import std/re
+import std/strformat
+import std/strutils
+import std/json
+import std/jsonutils
 
 import zip/zipfiles
 
 import config
 import types
 
-proc `==`(a, b: Addon): bool {.inline.} =
+proc `==`*(a, b: Addon): bool {.inline.} =
   a.project == b.project
-
 
 proc newAddon*(project: string, kind: AddonKind, 
               name: string = "", version: string = "", dirs: seq[string] = @[], branch: Option[string] = none(string)): Addon =
@@ -126,12 +124,11 @@ proc processTocs(path: string): bool =
       var (dir, name, ext) = splitFile(file)
       if ext == ".toc":
         if name != lastPathPart(dir):
-          let p = re("(.+)[-_](mainline|wrath|tbc|vanilla|wotlkc?|bcc|classic)", flags = {reIgnoreCase})
+          let p = re("(.+?)(?:$|[-_](?i:mainline|wrath|tbc|vanilla|wotlkc?|bcc|classic))", flags = {reIgnoreCase})
           var m: array[2, string]
           let found = find(cstring(name), p, m, 0, len(name))
-          if found != -1:
-            name = m[0]
-            moveDir(dir, joinPath(parentDir(dir), name))
+          name = m[0]
+          moveDir(dir, joinPath(parentDir(dir), name))
         return true
   return false
 
@@ -157,19 +154,20 @@ proc getAddonDirs(addon: Addon): seq[string] =
         return getSubdirs(parentDir(current))
     firstPass = false
 
-proc remove(addon: Addon) =
+proc removeFiles(addon: Addon) =
   for dir in addon.dirs:
     removeDir(dir)
 
-proc deleteInstalled(addon: Addon) =
+proc cleanupInstalled(addon: Addon): int16 =
   for a in configData.addons:
     if a == addon:
-      a.remove()
-      break
+      a.removeFiles()
+      return a.id
+  return 0
 
 proc moveDirs(addon: Addon) =
   let source = addon.getAddonDirs()
-  addon.deleteInstalled()
+  addon.id = addon.cleanupInstalled()
   for dir in source:
     let name = lastPathPart(dir)
     addon.dirs.add(name)
@@ -187,11 +185,26 @@ proc unzip(addon: Addon) =
   z.extractAll(addon.extractDir)
 
 
-proc install*(addon: Addon) {.async.} =
+proc fromCache(addon: Addon): Future[JsonNode] {.async.} =
+  if configData.tukuiCache.isNil:
+    let response = await addon.getLatest()
+    let body = await response.body
+    configData.tukuiCache = parseJson(body)
+  var json = configData.tukuiCache
+  for node in json:
+    if node["id"].getStr().strip(chars = {'"'}) == addon.project:
+      json = node
+  return json
+
+proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
   echo "Checking: ", addon.project
-  let response = await addon.getLatest()
-  let body = await response.body
-  let json = parseJson(body)
+  var json: JsonNode
+  if addon.kind == TukuiAddon:
+    json = await addon.fromCache()
+  else:
+    let response = await addon.getLatest()
+    let body = await response.body
+    json = parseJson(body)
   echo "Parsing: ", addon.project
   let updateNeeded = addon.setVersion(json)
   if updateNeeded:
@@ -203,5 +216,42 @@ proc install*(addon: Addon) {.async.} =
     addon.unzip()
     addon.moveDirs()
     echo "Finished: ", addon.name
+    return some(addon)
   else:
     echo "Skipped: ", addon.project
+    return none(Addon)
+  
+proc toJsonHook*(a: Addon): JsonNode =
+  result = newJObject()
+  result["project"] = %a.project
+  if a.branch.isSome():
+    result["branch"] = %a.branch.get()
+  result["name"] = %a.name
+  result["kind"] = %a.kind
+  result["version"] = %a.version
+  result["id"] = %a.id
+  result["dirs"] = %a.dirs
+
+proc fromJsonHook*(a: var Addon, j: JsonNode) =
+  var
+    b: Option[string]
+    d: seq[string]
+    k: AddonKind
+  
+  try:
+    b = some($j["branch"])
+  except:
+    b = none(string)
+
+  d.fromJson(j["dirs"])
+  k.fromJson(j["kind"])
+
+  a = newAddon(
+    $j["project"],
+    k,
+    branch = b,
+    version = $j["version"],
+    name = $j["name"],
+    dirs = d
+  )
+  

@@ -2,13 +2,13 @@ import std/strutils
 
 const indent: int = 2
 
-proc jsonBeautify*(filename: string) = 
+proc beautify*(j: string): string = 
   var s: string
   var d = indent
 
   var newline = false
   var insideSeq = false
-  for c in readFile(filename):
+  for c in j:
     case c
     of '{':
       if newline:
@@ -44,4 +44,4 @@ proc jsonBeautify*(filename: string) =
       s = s & c
       newline = false
 
-  writeFile(filename, s)
+  return s

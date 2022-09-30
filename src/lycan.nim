@@ -2,38 +2,39 @@ import print
 
 import std/asyncdispatch
 import std/json
+import std/jsonutils
 import std/options
 import std/os
 import std/parseopt
 import std/re
+import std/sequtils
 import std/strutils
+import std/sugar
 
-import jsonbeautify
+import prettyjson
 
 import config
 import addon
 import types
 
-# proc assignIds() =
-#   var ids: set[int16]
-#   for addon in config.addons:
-#     incl(ids, addon.id)
+proc assignIds(addons: seq[Addon]) =
+  var ids: set[int16]
+  for addon in addons:
+    incl(ids, addon.id)
 
-#   var id: int16 = 1
-#   for addon in config.addons:
-#     if addon.id == 0:
-#       while id in ids: id += 1
-#       addon.id = id
-#       incl(ids, id)
+  var id: int16 = 1
+  for addon in addons:
+    if addon.id == 0:
+      while id in ids: id += 1
+      addon.id = id
+      incl(ids, id)
 
-
-# proc writeInstalledAddons() =
-#   assignIds()
-#   let addonsJson = config.addons.toJson(opt = ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
-#   let file = open(config.datafile, fmWrite)
-#   write(file, addonsJson)
-#   close(file)
-#   jsonBeautify(config.datafile)
+proc writeAddons(addons: seq[Addon]) =
+  let addonsJson = addons.toJson(opt = ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
+  let prettyJson = beautify($addonsJson)
+  let file = open(configData.addonJsonFile, fmWrite)
+  write(file, prettyJson)
+  close(file)
   
 # https://github.com/Stanzilla/AdvancedInterfaceOptions
 # https://github.com/Tercioo/Plater-Nameplates/tree/master
@@ -41,6 +42,8 @@ import types
 # https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
 # https://www.tukui.org/download.php?ui=elvui
 # https://www.tukui.org/addons.php?id=209
+
+# https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/siebens/legacy/autoactioncam https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html https://www.tukui.org/download.php?ui=elvui https://www.tukui.org/addons.php?id=209
 
 proc addonFromUrl(url: string): Option[Addon] =
   var urlmatch: array[2, string]
@@ -96,12 +99,15 @@ var opt = initOptParser(
   longNoVal = @["help", "list", "update"]
 )
 
-
-proc process(addons: seq[Addon]) {.async.} =
-  var futures: seq[Future[void]]
+proc process(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
+  var futures: seq[Future[Option[Addon]]]
   for addon in addons:
     futures.add(addon.install())
-  await all(futures)
+  let opt = await all(futures)
+  let addons = collect(newSeq):
+    for a in opt:
+      if a.isSome: a.get()
+  return addons
 
 
 var action: Action = doUpdate
@@ -147,9 +153,11 @@ case action
   of doList: echo "TODO list"
   of doNothing: discard
 
-waitFor addons.process()
-
-# writeInstalledAddons()
+let updates = waitFor addons.process()
+let noupdates = configData.addons.filter(proc (addon: Addon): bool = addon in updates)
+let finalAddons = concat(updates, noupdates)
+assignIds(finalAddons)
+writeAddons(finalAddons)
 
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
 # addons folder is <WoW>\_retail_\Interface\AddOns
