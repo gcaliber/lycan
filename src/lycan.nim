@@ -110,8 +110,7 @@ proc process(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
       if a.isSome: a.get()
   return addons
 
-
-var action: Action = doUpdate
+var action: Action = DoUpdate
 var args: seq[string]
 for kind, key, val in opt.getopt():
   case kind
@@ -119,28 +118,29 @@ for kind, key, val in opt.getopt():
     if val == "":
       case key:
         of "h", "help": displayHelp()
-        of "a", "i": action = doInstall
-        of "u": action = doUpdate
-        of "r": action = doRemove
-        of "l", "list": action = doList
+        of "a", "i": action = DoInstall
+        of "u": action = DoUpdate
+        of "r": action = DoRemove
+        of "l", "list": action = DoList
         else: displayHelp()
     else:
       args.add(val)
       case key:
-        of "add", "install": action = doInstall
-        of "remove": action = doRemove
-        of "pin": action = doPin
-        of "unpin": action = doUnpin
-        of "restore": action = doRestore
+        of "add", "install": action = DoInstall
+        of "remove": action = DoRemove
+        of "pin": action = DoPin
+        of "unpin": action = DoUnpin
+        of "restore": action = DoRestore
         else: displayHelp()
   of cmdArgument:
     args.add(key)
   else: displayHelp()
 
-var addons: seq[Addon]
+var 
+  addons: seq[Addon]
+  i = 0
 case action
-  of doInstall:
-    var i = 0
+  of DoInstall:
     for arg in args:
       var addon = addonFromUrl(arg)
       if addon.isSome:
@@ -148,15 +148,17 @@ case action
         a.line = i
         addons.add(a)
         i += 1
-  of doUpdate:
-    addons = configData.addons
-  of doRemove: 
+  of DoUpdate:
+    for addon in configData.addons:
+      addon.line = i
+      addons.add(addon)
+      i += 1
+  of DoRemove: 
     echo "TODO"
-  of doPin: echo "TODO pin"
-  of doUnpin: echo "TODO unpin"
-  of doRestore: echo "TODO restore"
-  of doList: echo "TODO list"
-  of doNothing: discard
+  of DoPin: echo "TODO pin"
+  of DoUnpin: echo "TODO unpin"
+  of DoRestore: echo "TODO restore"
+  of DoList: echo "TODO list"
 
 let updates = waitFor addons.process()
 let noupdates = configData.addons.filter(proc (addon: Addon): bool = addon notin updates)

@@ -1,5 +1,6 @@
 import print
 
+import std/colors
 import std/asyncdispatch
 import std/httpclient
 import std/json
@@ -197,16 +198,37 @@ proc fromCache(addon: Addon): Future[JsonNode] {.async.} =
       json = node
   return json
 
-proc msg(addon: Addon, s: string, fg: ForegroundColor = fgWhite, bg: BackgroundColor = bgBlack, style: set[Style] = {styleDim) = 
-  let name = if not addon.name.isEmptyOrWhitespace: addon.name else: $addon.kind & ':' & addon.project
-  stdout.setForeGroundColor(fg)
-  stdout.setBackGroundColor(bg)
-  stdout.writeStyled(&"  {s:<15}{name}", style, x = 0, y = addon.line, erase = true)
-  stdout.resetAttributes()
+const DARK_GREY: Color = Color(0x20_20_20)
+const LIGHT_GREY: Color = Color(0x34_34_34)
+
+proc addonStateMessage(addon: Addon, state: AddonState) = 
+  let 
+    name = if not addon.name.isEmptyOrWhitespace: addon.name else: $addon.kind & ':' & addon.project
+    t = configData.term
+    even = addon.line mod 2 == 0
+  var 
+    pre: string
+    post: string
+  case state
+    Checking: 
+    Parsing:
+    Downloading:
+    Installing:
+    Finished:
+    AlreadyUpdated:
+  let t = configData.term
+  if t.trueColor:
+    let colors = if addon.line mod 2 == 0: (fg, DARK_GREY) else: (fg, LIGHT_GREY)
+    t.write(0, addon.line, true, colors, &"  {s:<13}", fgDefault, &"{name:<40}", resetStyle)
+  else:
+    if addon.line mod 2 == 0:
+      t.write(0, addon.line, true, fg, &"  {s:<13}", fgDefault, &"{name:<40}", resetStyle)
+    else:
+      t.write(0, addon.line, true, fg, styleReverse, &"  {s:<13}", fgDefault, &"{name:<40}", resetStyle)
 
 proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
   # echo "Checking: ", addon.project
-  addon.msg("Checking", fgBlue)
+  addon.addonStateMessage("Checking", fg = fgCyan)
   var json: JsonNode
   if addon.kind == TukuiAddon:
     json = await addon.fromCache()
@@ -215,24 +237,24 @@ proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
     let body = await response.body
     json = parseJson(body)
   # echo "Parsing: ", addon.project
-  addon.msg("Parsing", fgBlue)
+  addon.addonStateMessage("Parsing", fg = fgCyan)
   let updateNeeded = addon.setVersion(json)
   if updateNeeded:
     addon.setDownloadUrl(json)
     addon.setName(json)
     # echo "Downloading: ", addon.name
-    addon.msg("Downloading", fgBlue)
+    addon.addonStateMessage("Downloading", fg = fgCyan)
     await addon.download()
     # echo "Finishing: ", addon.name
-    addon.msg("Installing", fgBlue)
+    addon.addonStateMessage("Installing", fg = fgCyan)
     addon.unzip()
     addon.moveDirs()
     # echo "Finished: ", addon.name
-    addon.msg("Finished", fgGreen)
+    addon.addonStateMessage("Finished", fg = fgGreen)
     return some(addon)
   else:
     # echo "Skipped: ", addon.project
-    addon.msg("Finished - Skipped", fgGreen)
+    addon.addonStateMessage("Skipped", fg = fgRed)
     return none(Addon)
 
 

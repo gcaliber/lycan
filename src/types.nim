@@ -3,8 +3,14 @@ import std/options
 
 type
   Action* = enum
-    doInstall, doUpdate, doRemove, doList, doPin, doUnpin, doRestore, doNothing
+    DoInstall, DoUpdate, DoRemove, DoList, DoPin, DoUnpin, DoRestore
 
+  AddonState* = enum
+    Checking, Parsing, Downloading, Installing, Finished, AlreadyUpdated
+  
+  AddonKind* = enum
+    Github, GithubRepo, Gitlab, TukuiMain, TukuiAddon, Wowint,
+  
   Config* = object
     mode*: string
     tempDir*: string
@@ -12,14 +18,9 @@ type
     addonJsonFile*: string
     tukuiCache*: JsonNode
     addons*: seq[Addon]
+    term*: Term
 
-  AddonKind* = enum
-    Github,
-    GithubRepo,
-    Gitlab,
-    TukuiMain,
-    TukuiAddon,
-    Wowint,
+
 
   Addon* = ref object
     project*: string
@@ -35,6 +36,8 @@ type
     line*: int
 
   Term* = ref object
+    f*: File
+    trueColor*: bool
     x*: int
     y*: int
     yMax*: int

@@ -44,7 +44,7 @@
     "project":"209",
     "name":"Eltruism",
     "kind":"TukuiAddon",
-    "version":"3.4.5.2",
+    "version":"3.4.6",
     "id":6,
     "dirs":["ElvUI_EltreumUI"]
   }

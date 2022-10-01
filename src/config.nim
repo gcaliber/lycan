@@ -6,6 +6,7 @@ import std/json
 import std/jsonutils
 
 import types
+import term
 
 const LYCAN_CFG: string = "/home/mike/projects/lycan/test/lycan.cfg"
 
@@ -51,7 +52,8 @@ var configData* = Config(
   tempDir: getTempDir(),
   installDir: configJson[mode]["addonDir"].getStr(),
   addonJsonFile: file,
-  addons: parseInstalledAddons(file)
+  addons: parseInstalledAddons(file),
+  term: termInit()
 )
 
 

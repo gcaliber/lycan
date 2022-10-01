@@ -1,37 +1,29 @@
 import std/colors
 import std/exitprocs
-import std/strformat
-import std/strutils
 import std/terminal
 import std/macros
 
 import types
 
-var t = new(Term)
-enableTrueColors()
-hideCursor()
-
-proc moveTo(x, y: int) =
+proc moveTo(t: Term, x, y: int) =
   let
     xOffset = t.x - x
     yOffset = t.y - y
 
-  if xOffset != 0:
-    if xOffset > 0:
-      stdout.cursorBackward(count = xOffset)
-    else:
-      stdout.cursorForward(count = abs(xOffset))
+  if xOffset > 0:
+    stdout.cursorBackward(count = xOffset)
+  elif xOffset < 0:
+    stdout.cursorForward(count = abs(xOffset))
 
-  if yOffset != 0:
-    if yOffset > 0:
-      stdout.cursorUp(count = yOffset)
-    else:
-      stdout.cursorDown(count = abs(yOffset))
+  if yOffset > 0:
+    stdout.cursorUp(count = yOffset)
+  elif yOffset < 0:
+    stdout.cursorDown(count = abs(yOffset))
   
   t.x = x
   t.y = y
 
-proc update(s: string) =
+proc updatePos(t: Term, s: string) =
   for c in s:
     case c
     of '\t': 
@@ -51,79 +43,89 @@ proc update(s: string) =
     t.yMax = t.y
 
 
-proc writeTerm(f: File, s: string) =
-  f.write(s)
-  update(s)
+proc write*(t: Term, s: string) =
+  t.f.write(s)
+  t.updatePos(s)
 
-proc writeStyledTerm(f: File, s:string, style: set[Style]) =
-  f.styledWrite(s, style)
-  update(s)
+proc writeLine*(t: Term, s: string) =
+  t.f.write(s)
+  t.f.write("\n")
+  t.updatePos(s)
 
-proc write*(f: File, s: string, x: int = t.x, y: int = t.y, erase: bool = false) =
-  moveTo(x, y)
-  if erase:
-    f.eraseLine()
-  f.writeTerm(s)
+proc write*(t: Term, x, y: int, erase: bool, s: string) =
+  t.moveTo(x, y)
+  if erase: t.f.eraseLine()
+  t.write(s)
 
-proc writeStyled*(f: File, s: string, style: set[Style] = {styleBright}, x: int = t.x, y: int = t.y, erase: bool = false) =
-  moveTo(x, y)
-  if erase:
-    f.eraseLine()
-  f.writeStyledTerm(s, style)
+proc writeLine*(t: Term, x, y: int, erase: bool, s: string) =
+  t.moveTo(x, y)
+  if erase: t.f.eraseLine()
+  t.writeLine(s)
 
-proc writeLine*(f: File, s: string, x: int = t.x, y: int = t.y, erase: bool = false) =
-  f.write(s, x, y, erase = erase)
-  f.writeTerm("\n")
+proc eraseLine(t: Term, erase: bool) =
+  if erase: t.f.eraseLine()
 
-proc writeStyledLine*(f: File, s: string, style: set[Style] = {styleBright}, x: int = t.x, y: int = t.y, erase: bool = false) =
-  f.writeStyled(s, style, x, y, erase)
-  f.writeTerm("\n")
+proc exitTerm(t: Term): proc() =
+  return proc() =
+    t.writeLine(0, t.yMax, false, "\n")
+    resetAttributes()
+    showCursor()
 
+proc termInit*(f: File = stdout): Term =
+  enableTrueColors()
+  hideCursor()
+  result = new(Term)
+  result.f = f
+  result.trueColor = isTrueColorSupported()
+  let exit = exitTerm(result)
+  exitprocs.addExitProc(exit)
 
-proc reset() =
-  stdout.writeLine(0, t.yMax, false, "")
-  stdout.resetAttributes()
-  showCursor()
+template writeProcessArg(t: Term, s: string) =
+  t.write(s)
 
-exitprocs.addExitProc(reset)
+template writeProcessArg(t: Term, style: Style) =
+  t.f.setStyle({style})
 
-# template styledEchoProcessArg(f: File, x, y: int, erase: bool, s: string) = writeTerm(f, x, y, erase, s)
-# template styledEchoProcessArg(f: File, x, y: int, erase: bool, style: Style) = setStyle(f, {style})
-# template styledEchoProcessArg(f: File, x, y: int, erase: bool, style: set[Style]) = setStyle f, style
-# template styledEchoProcessArg(f: File, x, y: int, erase: bool, color: ForegroundColor) =
-#   setForegroundColor f, color
-# template styledEchoProcessArg(f: File, x, y: int, erase: bool, color: BackgroundColor) =
-#   setBackgroundColor f, color
-# template styledEchoProcessArg(f: File, x, y: int, erase: bool, color: Color) =
-#   setTrueColor f, color
-# template styledEchoProcessArg(f: File, x, y: int, erase: bool, cmd: TerminalCmd) =
-#   when cmd == resetStyle:
-#     resetAttributes(f)
-#   elif cmd in {fgColor, bgColor}:
-#     let term = getTerminal()
-#     term.fgSetColor = cmd == fgColor
+template writeProcessArg(t: Term, style: set[Style]) =
+  t.f.setStyle(style)
 
-# macro styledWriteTerm*(f: File, x, y: int, erase: bool, m: varargs[typed]): untyped =
-#   var reset = false
-#   result = newNimNode(nnkStmtList)
+template writeProcessArg(t: Term, color: ForegroundColor) =
+  t.f.setForegroundColor(color)
 
-#   for i in countup(0, m.len - 1):
-#     let item = m[i]
-#     case item.kind
-#     of nnkStrLit..nnkTripleStrLit:
-#       if i == m.len - 1:
-#         # optimize if string literal is last, just call write
-#         result.add(newCall(bindSym"writeTerm", f, x, y, erase, item))
-#         if reset: result.add(newCall(bindSym"resetAttributes", f))
-#         return
-#       else:
-#         # if it is string literal just call write, do not enable reset
-#         result.add(newCall(bindSym"writeTerm", f, x, y, erase, item))
-#     else:
-#       result.add(newCall(bindSym"styledEchoProcessArg", f, x, y, erase, item))
-#       reset = true
-#   if reset: result.add(newCall(bindSym"resetAttributes", f))
+template writeProcessArg(t: Term, color: BackgroundColor) =
+  t.f.setBackgroundColor(color)
 
-# template styledWriteLineTerm*(f: File, x, y: int, erase: bool, args: varargs[untyped]) =
-#   styledWriteTerm(f, x, y, erase, args)
-#   writeTermReal(f, "\n")
+template writeProcessArg(t: Term, colors: tuple[fg, bg: Color]) =
+  let (fg, bg) = colors
+  t.f.setForegroundColor(fg)
+  t.f.setBackgroundColor(bg)
+
+template writeProcessArg(t: Term, colors: tuple[fg: ForegroundColor, bg: Color]) =
+  let (fg, bg) = colors
+  t.f.setForegroundColor(fg)
+  t.f.setBackgroundColor(bg)
+
+template writeProcessArg(t: Term, colors: tuple[fg: Color, bg: BackgroundColor]) =
+  let (fg, bg) = colors
+  t.f.setForegroundColor(fg)
+  t.f.setBackgroundColor(bg)
+
+template writeProcessArg(t: Term, cmd: TerminalCmd) =
+  when cmd == resetStyle:
+    t.f.resetAttributes()
+
+macro write*(t: Term, args: varargs[typed]): untyped =
+  result = newNimNode(nnkStmtList)
+  if args.len >= 3 and args[0].typeKind() == ntyInt and args[1].typeKind() == ntyInt:
+    let x = args[0]
+    let y = args[1]
+    result.add(newCall(bindSym"moveTo", t, x, y))
+    if args.len >= 4 and args[2].typeKind() == ntyBool:
+      let erase = args[2]
+      result.add(newCall(bindSym"eraseLine", t, erase))
+    for i in 3..<args.len:
+      let item = args[i]
+      result.add(newCall(bindSym"writeProcessArg", t, item))
+  else:
+    for item in args.items:
+      result.add(newCall(bindSym"writeProcessArg", t, item))
