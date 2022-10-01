@@ -1,3 +1,5 @@
+import print
+
 import std/options
 import std/os
 import std/json
@@ -18,19 +20,19 @@ proc fromJsonHook(a: var Addon, j: JsonNode) =
     k: AddonKind
   
   try:
-    b = some($j["branch"])
-  except:
+    b = some(j["branch"].getStr())
+  except KeyError:
     b = none(string)
 
   d.fromJson(j["dirs"])
   k.fromJson(j["kind"])
 
   a = new(Addon)
-  a.project = $j["project"]
+  a.project = j["project"].getStr()
   a.kind = k
   a.branch = b
-  a.version = $j["version"]
-  a.name = $j["name"]
+  a.version = j["version"].getStr()
+  a.name = j["name"].getStr()
   a.dirs = d
 
 proc parseInstalledAddons(filename: string): seq[Addon] =

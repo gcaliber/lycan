@@ -2,18 +2,19 @@ import print
 
 import std/asyncdispatch
 import std/httpclient
+import std/json
 import std/options
 import std/os
 import std/re
 import std/strformat
 import std/strutils
-import std/json
-import std/jsonutils
+import std/terminal
 
 import zip/zipfiles
 
 import config
 import types
+import term
 
 proc `==`*(a, b: Addon): bool {.inline.} =
   a.project == b.project
@@ -114,7 +115,7 @@ proc download(addon: Addon) {.async.} =
     downloadName = addon.downloadUrl.split('/')[^1]
   addon.filename = joinPath(configData.tempDir, downloadName)
   let file = open(addon.filename, fmWrite)
-  write(file, await response.body)
+  io.write(file, await response.body)
   close(file)
 
 
@@ -126,7 +127,7 @@ proc processTocs(path: string): bool =
         if name != lastPathPart(dir):
           let p = re("(.+?)(?:$|[-_](?i:mainline|wrath|tbc|vanilla|wotlkc?|bcc|classic))", flags = {reIgnoreCase})
           var m: array[2, string]
-          let found = find(cstring(name), p, m, 0, len(name))
+          discard find(cstring(name), p, m, 0, len(name))
           name = m[0]
           moveDir(dir, joinPath(parentDir(dir), name))
         return true
@@ -196,8 +197,16 @@ proc fromCache(addon: Addon): Future[JsonNode] {.async.} =
       json = node
   return json
 
+proc msg(addon: Addon, s: string, fg: ForegroundColor = fgWhite, bg: BackgroundColor = bgBlack, style: set[Style] = {styleDim) = 
+  let name = if not addon.name.isEmptyOrWhitespace: addon.name else: $addon.kind & ':' & addon.project
+  stdout.setForeGroundColor(fg)
+  stdout.setBackGroundColor(bg)
+  stdout.writeStyled(&"  {s:<15}{name}", style, x = 0, y = addon.line, erase = true)
+  stdout.resetAttributes()
+
 proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
-  echo "Checking: ", addon.project
+  # echo "Checking: ", addon.project
+  addon.msg("Checking", fgBlue)
   var json: JsonNode
   if addon.kind == TukuiAddon:
     json = await addon.fromCache()
@@ -205,22 +214,28 @@ proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
     let response = await addon.getLatest()
     let body = await response.body
     json = parseJson(body)
-  echo "Parsing: ", addon.project
+  # echo "Parsing: ", addon.project
+  addon.msg("Parsing", fgBlue)
   let updateNeeded = addon.setVersion(json)
   if updateNeeded:
     addon.setDownloadUrl(json)
     addon.setName(json)
-    echo "Downloading: ", addon.name
+    # echo "Downloading: ", addon.name
+    addon.msg("Downloading", fgBlue)
     await addon.download()
-    echo "Finishing: ", addon.name
+    # echo "Finishing: ", addon.name
+    addon.msg("Installing", fgBlue)
     addon.unzip()
     addon.moveDirs()
-    echo "Finished: ", addon.name
+    # echo "Finished: ", addon.name
+    addon.msg("Finished", fgGreen)
     return some(addon)
   else:
-    echo "Skipped: ", addon.project
+    # echo "Skipped: ", addon.project
+    addon.msg("Finished - Skipped", fgGreen)
     return none(Addon)
-  
+
+
 proc toJsonHook*(a: Addon): JsonNode =
   result = newJObject()
   result["project"] = %a.project
@@ -231,27 +246,3 @@ proc toJsonHook*(a: Addon): JsonNode =
   result["version"] = %a.version
   result["id"] = %a.id
   result["dirs"] = %a.dirs
-
-proc fromJsonHook*(a: var Addon, j: JsonNode) =
-  var
-    b: Option[string]
-    d: seq[string]
-    k: AddonKind
-  
-  try:
-    b = some($j["branch"])
-  except:
-    b = none(string)
-
-  d.fromJson(j["dirs"])
-  k.fromJson(j["kind"])
-
-  a = newAddon(
-    $j["project"],
-    k,
-    branch = b,
-    version = $j["version"],
-    name = $j["name"],
-    dirs = d
-  )
-  

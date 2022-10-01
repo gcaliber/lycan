@@ -32,3 +32,9 @@ type
     downloadUrl*: string
     filename*: string
     extractDir*: string
+    line*: int
+
+  Term* = ref object
+    x*: int
+    y*: int
+    yMax*: int

@@ -16,6 +16,7 @@ import prettyjson
 import config
 import addon
 import types
+import term
 
 proc assignIds(addons: seq[Addon]) =
   var ids: set[int16]
@@ -139,12 +140,16 @@ for kind, key, val in opt.getopt():
 var addons: seq[Addon]
 case action
   of doInstall:
+    var i = 0
     for arg in args:
       var addon = addonFromUrl(arg)
       if addon.isSome:
-        addons.add(addon.get())
+        var a = addon.get()
+        a.line = i
+        addons.add(a)
+        i += 1
   of doUpdate:
-    echo "TODO"
+    addons = configData.addons
   of doRemove: 
     echo "TODO"
   of doPin: echo "TODO pin"
@@ -154,7 +159,7 @@ case action
   of doNothing: discard
 
 let updates = waitFor addons.process()
-let noupdates = configData.addons.filter(proc (addon: Addon): bool = addon in updates)
+let noupdates = configData.addons.filter(proc (addon: Addon): bool = addon notin updates)
 let finalAddons = concat(updates, noupdates)
 assignIds(finalAddons)
 writeAddons(finalAddons)
