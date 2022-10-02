@@ -210,12 +210,18 @@ proc addonStateMessage(addon: Addon, state: AddonState) =
     pre: string
     post: string
   case state
-    Checking: 
+    Checking:
+      pre = "Checking"
     Parsing:
+      pre = "Parsing"
     Downloading:
+      pre = "Downloading"
     Installing:
+      pre = "Installing"
     Finished:
+      pre = "Finished"
     AlreadyUpdated:
+      pre = "Finished"
   let t = configData.term
   if t.trueColor:
     let colors = if addon.line mod 2 == 0: (fg, DARK_GREY) else: (fg, LIGHT_GREY)
@@ -228,7 +234,7 @@ proc addonStateMessage(addon: Addon, state: AddonState) =
 
 proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
   # echo "Checking: ", addon.project
-  addon.addonStateMessage("Checking", fg = fgCyan)
+  addon.addonStateMessage(Checking)
   var json: JsonNode
   if addon.kind == TukuiAddon:
     json = await addon.fromCache()
@@ -237,24 +243,24 @@ proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
     let body = await response.body
     json = parseJson(body)
   # echo "Parsing: ", addon.project
-  addon.addonStateMessage("Parsing", fg = fgCyan)
+  addon.addonStateMessage(Parsing)
   let updateNeeded = addon.setVersion(json)
   if updateNeeded:
     addon.setDownloadUrl(json)
     addon.setName(json)
     # echo "Downloading: ", addon.name
-    addon.addonStateMessage("Downloading", fg = fgCyan)
+    addon.addonStateMessage(Downloading)
     await addon.download()
     # echo "Finishing: ", addon.name
-    addon.addonStateMessage("Installing", fg = fgCyan)
+    addon.addonStateMessage(Installing)
     addon.unzip()
     addon.moveDirs()
     # echo "Finished: ", addon.name
-    addon.addonStateMessage("Finished", fg = fgGreen)
+    addon.addonStateMessage(Finished)
     return some(addon)
   else:
     # echo "Skipped: ", addon.project
-    addon.addonStateMessage("Skipped", fg = fgRed)
+    addon.addonStateMessage(AlreadyUpdated)
     return none(Addon)
 
 
