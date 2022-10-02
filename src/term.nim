@@ -11,46 +11,49 @@ proc moveTo(t: Term, x, y: int) =
     yOffset = t.y - y
 
   if xOffset > 0:
-    stdout.cursorBackward(count = xOffset)
+    t.f.cursorBackward(count = xOffset)
   elif xOffset < 0:
-    stdout.cursorForward(count = abs(xOffset))
+    t.f.cursorForward(count = abs(xOffset))
 
   if yOffset > 0:
-    stdout.cursorUp(count = yOffset)
+    t.f.cursorUp(count = yOffset)
   elif yOffset < 0:
-    stdout.cursorDown(count = abs(yOffset))
-  
+    var n = abs(yOffset)
+    while n < t.yMax: 
+      t.f.cursorDown()
+      n += 1
+    while n < y:
+      t.f.write("\n")
+      n += 1
+# I need to take terminal height into account somehow
+# sorta close to being right other than that
   t.x = x
   t.y = y
 
 proc updatePos(t: Term, s: string) =
   for c in s:
     case c
-    of '\t': 
-      t.x += 4
-    of '\n': 
-      t.x = 0
-      t.y += 1
-    of '\r':
-      t.x = 0
-    else:
-      t.x += 1
+    of '\t': t.x += 4
+    of '\n': t.x = 0; t.y += 1
+    of '\r': t.x = 0
+    else:    t.x += 1
   
   let h = terminalHeight()
-  if t.y > h:
-    t.y = h
-  if t.y > t.yMax:
-    t.yMax = t.y
+  if t.y > h: t.y = h
+  if t.y > t.yMax: t.yMax = t.y
 
 
 proc write*(t: Term, s: string) =
   t.f.write(s)
+  t.f.flushFile()
   t.updatePos(s)
 
 proc writeLine*(t: Term, s: string) =
   t.f.write(s)
   t.f.write("\n")
+  t.f.flushFile()
   t.updatePos(s)
+  t.updatePos("\n")
 
 proc write*(t: Term, x, y: int, erase: bool, s: string) =
   t.moveTo(x, y)
@@ -129,3 +132,12 @@ macro write*(t: Term, args: varargs[typed]): untyped =
   else:
     for item in args.items:
       result.add(newCall(bindSym"writeProcessArg", t, item))
+
+
+when isMainModule:
+  import std/strformat
+
+  let t = termInit()
+  for line in 5 .. 10:
+    t.write(0, line, true, &"{line}")
+    # t.write(0, line, true, fgWhite, &"{line}", resetStyle)

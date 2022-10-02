@@ -11,12 +11,10 @@ import std/sequtils
 import std/strutils
 import std/sugar
 
-import prettyjson
-
-import config
 import addon
+import config
+import prettyjson
 import types
-import term
 
 proc assignIds(addons: seq[Addon]) =
   var ids: set[int16]
@@ -82,6 +80,11 @@ proc addonFromUrl(url: string): Option[Addon] =
     else:
       return none(Addon)
 
+proc addonFromId(id: int16): Option[Addon] =
+  for a in configData.addons:
+    if a.id == id:
+      return some(a)
+  return none(Addon)
 
 proc displayHelp() =
   echo "  -u, --update                 Update installed addons"
@@ -100,7 +103,8 @@ var opt = initOptParser(
   longNoVal = @["help", "list", "update"]
 )
 
-proc process(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
+proc installAll(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
+  for _ in 0 .. len(addons): echo ""
   var futures: seq[Future[Option[Addon]]]
   for addon in addons:
     futures.add(addon.install())
@@ -109,6 +113,13 @@ proc process(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
     for a in opt:
       if a.isSome: a.get()
   return addons
+
+proc removeAll(addons: seq[Addon]): seq[Addon] =
+  for _ in 0 .. len(addons): echo ""
+  var removed: seq[Addon]
+  for addon in addons:
+    removed.add(addon.uninstall())
+  return removed
 
 var action: Action = DoUpdate
 var args: seq[string]
@@ -138,33 +149,56 @@ for kind, key, val in opt.getopt():
 
 var 
   addons: seq[Addon]
-  i = 0
+  line = 0
 case action
   of DoInstall:
     for arg in args:
       var addon = addonFromUrl(arg)
       if addon.isSome:
         var a = addon.get()
-        a.line = i
+        a.line = line
         addons.add(a)
-        i += 1
+        line += 1
   of DoUpdate:
     for addon in configData.addons:
-      addon.line = i
+      addon.line = line
       addons.add(addon)
-      i += 1
-  of DoRemove: 
-    echo "TODO"
+      line += 1
+  of DoRemove:
+    var ids: seq[int16]
+    for arg in args:
+      try:
+        ids.add(int16(arg.parseInt()))
+      except:
+        continue
+    for id in ids:
+      var addon = addonFromId(id)
+      if addon.isSome:
+        var a = addon.get()
+        a.line = line
+        addons.add(a)
+        line += 1
   of DoPin: echo "TODO pin"
   of DoUnpin: echo "TODO unpin"
   of DoRestore: echo "TODO restore"
   of DoList: echo "TODO list"
 
-let updates = waitFor addons.process()
-let noupdates = configData.addons.filter(proc (addon: Addon): bool = addon notin updates)
-let finalAddons = concat(updates, noupdates)
-assignIds(finalAddons)
-writeAddons(finalAddons)
+case action
+  of DoInstall, DoUpdate:
+    let updates = waitFor addons.installAll()
+    # let noupdates = configData.addons.filter(proc (addon: Addon): bool = addon notin updates)
+    let noupdates = configData.addons.filter(addon => addon notin updates)
+    let final = concat(updates, noupdates)
+    assignIds(final)
+    # writeAddons(final)
+  of DoRemove:
+    let removed = addons.removeAll()
+    let final = configData.addons.filter(addon => addon notin removed)
+    # writeAddons(final)
+  of DoPin: echo "TODO pin"
+  of DoUnpin: echo "TODO unpin"
+  of DoRestore: echo "TODO restore"
+  of DoList: echo "TODO list"
 
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
 # addons folder is <WoW>\_retail_\Interface\AddOns
