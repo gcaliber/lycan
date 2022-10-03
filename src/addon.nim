@@ -65,19 +65,19 @@ proc stateMessage(addon: Addon) =
   case addon.state
   of Checking, Parsing:
     t.write(indent, addon.line, true, colors, style,
-      fgCyan, &"{addon.line} {$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgCyan, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
       fgYellow, &"{addon.prettyOldVersion()}", resetStyle)
   of Downloading, Installing:
     t.write(indent, addon.line, true, colors, style,
-      fgCyan, &"{addon.line} {$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgCyan, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Finished:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{addon.line} {$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of AlreadyUpdated:
       t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{addon.line} {$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Removing, Removed:
       t.write(indent, addon.line, true, colors, style,
@@ -279,6 +279,7 @@ proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
   if addon.version != addon.oldVersion:
     addon.setDownloadUrl(json)
     addon.setName(json)
+    addon.setAddonState(Downloading)
     await addon.download()
     addon.setAddonState(Installing)
     addon.unzip()

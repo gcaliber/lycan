@@ -184,15 +184,14 @@ case action
 case action
   of DoInstall, DoUpdate:
     let updates = waitFor addons.installAll()
-    # let noupdates = configData.addons.filter(proc (addon: Addon): bool = addon notin updates)
     let noupdates = configData.addons.filter(addon => addon notin updates)
     let final = concat(updates, noupdates)
     assignIds(final)
-    # writeAddons(final)
+    writeAddons(final)
   of DoRemove:
     let removed = addons.removeAll()
     let final = configData.addons.filter(addon => addon notin removed)
-    # writeAddons(final)
+    writeAddons(final)
   of DoPin: echo "TODO pin"
   of DoUnpin: echo "TODO unpin"
   of DoRestore: echo "TODO restore"

@@ -12,7 +12,7 @@
     "branch":"master",
     "name":"Plater-Nameplates",
     "kind":"GithubRepo",
-    "version":"74f8e4fea5478b280c5f834690f7d952c3582641",
+    "version":"085b58e2e223d0df5838f1be9d2439a011b58abe",
     "id":2,
     "dirs":["Plater"]
   },
@@ -28,7 +28,7 @@
     "project":"24608",
     "name":"Hekili Priority Helper",
     "kind":"Wowint",
-    "version":"v9.2.7-1.0.0a",
+    "version":"v9.2.7-1.0.0b",
     "id":4,
     "dirs":["Hekili"]
   },
