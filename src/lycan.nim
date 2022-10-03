@@ -104,7 +104,6 @@ var opt = initOptParser(
 )
 
 proc installAll(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
-  for _ in 0 .. len(addons): echo ""
   var futures: seq[Future[Option[Addon]]]
   for addon in addons:
     futures.add(addon.install())
@@ -115,7 +114,6 @@ proc installAll(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
   return addons
 
 proc removeAll(addons: seq[Addon]): seq[Addon] =
-  for _ in 0 .. len(addons): echo ""
   var removed: seq[Addon]
   for addon in addons:
     removed.add(addon.uninstall())

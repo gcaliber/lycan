@@ -5,30 +5,40 @@ import std/macros
 
 import types
 
-proc moveTo(t: Term, x, y: int) =
-  let
-    xOffset = t.x - x
-    yOffset = t.y - y
-
-  if xOffset > 0:
-    t.f.cursorBackward(count = xOffset)
-  elif xOffset < 0:
-    t.f.cursorForward(count = abs(xOffset))
+proc moveTo(t: Term, x, y: int, erase: bool) =
+  let yOffset = t.y - y
+  var newLine = false
 
   if yOffset > 0:
-    t.f.cursorUp(count = yOffset)
+    t.f.cursorUp(yOffset)
   elif yOffset < 0:
-    var n = abs(yOffset)
-    while n < t.yMax: 
+    var i = t.y
+    while i < t.yMax and i < y:
       t.f.cursorDown()
-      n += 1
-    while n < y:
+      i += 1
+    if i < y:
+      newLine = true
+    while i < y:
       t.f.write("\n")
-      n += 1
-# I need to take terminal height into account somehow
-# sorta close to being right other than that
+      i += 1
+      
+  if erase or newLine:
+    t.f.eraseLine()
+    t.f.cursorForward(x)
+  else:
+    let xOffset = t.x - x
+    if xOffset > 0:
+      t.f.cursorBackward(xOffset)
+    elif xOffset < 0:
+      t.f.cursorForward(abs(xOffset))
+
   t.x = x
   t.y = y
+
+  let h = terminalHeight()
+  if t.y > h: t.y = h
+  if t.y > t.yMax: t.yMax = t.y
+  
 
 proc updatePos(t: Term, s: string) =
   for c in s:
@@ -56,21 +66,16 @@ proc writeLine*(t: Term, s: string) =
   t.updatePos("\n")
 
 proc write*(t: Term, x, y: int, erase: bool, s: string) =
-  t.moveTo(x, y)
-  if erase: t.f.eraseLine()
+  t.moveTo(x, y, erase)
   t.write(s)
 
 proc writeLine*(t: Term, x, y: int, erase: bool, s: string) =
-  t.moveTo(x, y)
-  if erase: t.f.eraseLine()
+  t.moveTo(x, y, erase)
   t.writeLine(s)
-
-proc eraseLine(t: Term, erase: bool) =
-  if erase: t.f.eraseLine()
 
 proc exitTerm(t: Term): proc() =
   return proc() =
-    t.writeLine(0, t.yMax, false, "\n")
+    t.writeLine(0, t.yMax, false, "")
     resetAttributes()
     showCursor()
 
@@ -119,13 +124,11 @@ template writeProcessArg(t: Term, cmd: TerminalCmd) =
 
 macro write*(t: Term, args: varargs[typed]): untyped =
   result = newNimNode(nnkStmtList)
-  if args.len >= 3 and args[0].typeKind() == ntyInt and args[1].typeKind() == ntyInt:
+  if args.len >= 4 and args[0].typeKind() == ntyInt and args[1].typeKind() == ntyInt and args[2].typeKind() == ntyBool:
     let x = args[0]
     let y = args[1]
-    result.add(newCall(bindSym"moveTo", t, x, y))
-    if args.len >= 4 and args[2].typeKind() == ntyBool:
-      let erase = args[2]
-      result.add(newCall(bindSym"eraseLine", t, erase))
+    let erase = args[2]
+    result.add(newCall(bindSym"moveTo", t, x, y, erase))
     for i in 3..<args.len:
       let item = args[i]
       result.add(newCall(bindSym"writeProcessArg", t, item))
@@ -135,9 +138,14 @@ macro write*(t: Term, args: varargs[typed]): untyped =
 
 
 when isMainModule:
-  import std/strformat
+    import std/strformat
+    let t = termInit()
+    
+    # for line in 0 .. 9:
+    #   t.write(0, line, true, fgWhite, &"{line}                                          ", resetStyle)
 
-  let t = termInit()
-  for line in 5 .. 10:
-    t.write(0, line, true, &"{line}")
-    # t.write(0, line, true, fgWhite, &"{line}", resetStyle)
+    t.write(5, 0, false, fgWhite, "0")
+    t.write(5, 1, false, fgWhite, "1")
+    t.write(5, 2, true, fgWhite, "2")
+    t.write(5, 3, true, fgWhite, "3")
+    t.write(5, 4, false, fgWhite, "4")
