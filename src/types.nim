@@ -16,7 +16,6 @@ type
     # BackingUp = "Backing up",
     Pinned = "Pinned",
     Unpinned = "Unpinned",
-    Removing = "Removing",
     Removed = "Removed",
   
   AddonKind* = enum

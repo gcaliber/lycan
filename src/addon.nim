@@ -80,7 +80,7 @@ proc stateMessage(addon: Addon) =
       t.write(indent, addon.line, true, colors, style,
       fgGreen, &"{addon.line} {$addon.state:<12}", fgDefault, &"{name:<32}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
-  of Removing, Removed:
+  of Removed:
       t.write(indent, addon.line, true, colors, style,
       fgYellow, &"{$addon.state:<12}", fgDefault, &"{name:<32}", resetStyle)
   of Pinned, Unpinned:
@@ -296,13 +296,16 @@ proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
     return none(Addon)
 
 proc uninstall*(addon: Addon): Addon =
-  addon.setAddonState(Removing)
   addon.removeFiles()
   addon.setAddonState(Removed)
   return addon
 
 proc pinToggle*(addon: Addon): Addon =
   addon.pinned = not addon.pinned
+  if addon.pinned:
+    addon.setAddonState(Pinned)
+  else:
+    addon.setAddonState(Unpinned)
   return addon
 
 proc toJsonHook*(a: Addon): JsonNode =
