@@ -196,7 +196,6 @@ of List:
     addons.sort((a, z) => a.time < z.time)
   for addon in addons:
     addon.line = line
-    addon.list()
     line += 1
 of Restore: echo "TODO restore"
 
@@ -216,6 +215,7 @@ of Pin, Unpin:
   let rest = configData.addons.filter(addon => addon notin toggled)
   final = concat(toggled, rest)
 of List: 
+  addons.apply(list)
   quit()
 of Restore: echo "TODO restore"
 else:
