@@ -193,7 +193,7 @@ of Remove, Pin, Unpin:
 of List:
   addons = configData.addons
   if "t" in args or "time" in args:
-    addons.sort((a, z) => a.time > z.time)
+    addons.sort((a, z) => a.time < z.time)
   for addon in addons:
     addon.line = line
     addon.list()
@@ -215,6 +215,8 @@ of Pin, Unpin:
   let toggled = addons.pinToggleAll()
   let rest = configData.addons.filter(addon => addon notin toggled)
   final = concat(toggled, rest)
+of List: 
+  quit()
 of Restore: echo "TODO restore"
 else:
   discard
