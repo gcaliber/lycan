@@ -1,5 +1,6 @@
 import std/json
 import std/options
+import std/times
 
 type
   Action* = enum
@@ -45,6 +46,7 @@ type
     extractDir*: string
     line*: int
     pinned*: bool
+    time*: DateTime
 
   Term* = ref object
     f*: File

@@ -1,5 +1,6 @@
 import print
 
+import std/algorithm
 import std/asyncdispatch
 import std/json
 import std/jsonutils
@@ -10,7 +11,7 @@ import std/re
 import std/sequtils
 import std/strutils
 import std/sugar
-import std/algorithm
+import std/times
 
 import addon
 import config
@@ -31,7 +32,7 @@ proc assignIds(addons: seq[Addon]) =
 
 proc writeAddons(addons: var seq[Addon]) =
   if len(addons) == 0: return
-  addons.sort((a, z) => int(a.name > z.name))
+  addons.sort((a, z) => a.name > z.name)
   let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
   let prettyJson = beautify($addonsJson)
   let file = open(configData.addonJsonFile, fmWrite)
@@ -171,7 +172,7 @@ of Install:
       a.line = line
       addons.add(a)
       line += 1
-of Update:
+of Update, Nothing:
   for addon in configData.addons:
     addon.line = line
     addons.add(addon)
@@ -189,7 +190,14 @@ of Remove, Pin, Unpin:
       a.line = line
       addons.add(a)
       line += 1
-of List: echo "TODO list"
+of List:
+  addons = configData.addons
+  if "t" in args or "time" in args:
+    addons.sort((a, z) => a.time > z.time)
+  for addon in addons:
+    addon.line = line
+    addon.list()
+    line += 1
 of Restore: echo "TODO restore"
 
 var final: seq[Addon]

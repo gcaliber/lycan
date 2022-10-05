@@ -10,6 +10,7 @@ import std/re
 import std/strformat
 import std/strutils
 import std/terminal
+import std/times
 
 import zip/zipfiles
 
@@ -17,20 +18,16 @@ import config
 import types
 import term
 
+
 proc `==`*(a, b: Addon): bool {.inline.} =
   a.project == b.project
 
-proc newAddon*(project: string, kind: AddonKind, 
-              name: string = "", version: string = "", dirs: seq[string] = @[], branch: Option[string] = none(string)): Addon =
-  var a = new(Addon)
-  a.project = project
-  a.name = name
-  a.kind = kind
-  a.version = version
-  a.dirs = dirs
-  a.branch = branch
-  result = a
-
+proc newAddon*(project: string, kind: AddonKind, branch: Option[string] = none(string)): Addon =
+  result = new(Addon)
+  result.project = project
+  result.kind = kind
+  result.branch = branch
+  result.time = now()
 
 proc prettyVersion(addon: Addon): string =
   if addon.version.isEmptyOrWhitespace: 
@@ -310,18 +307,7 @@ proc pinToggle*(addon: Addon): Addon =
     addon.setAddonState(Unpinned)
   return addon
 
-proc toJsonHook*(a: Addon): JsonNode =
-  result = newJObject()
-  result["project"] = %a.project
-  if a.branch.isSome():
-    result["branch"] = %a.branch.get()
-  result["name"] = %a.name
-  result["kind"] = %a.kind
-  result["version"] = %a.version
-  result["id"] = %a.id
-  result["dirs"] = %a.dirs
-
-proc list(addon: Addon) =
+proc list*(addon: Addon) =
   let
     t = configData.term
     even = addon.line mod 2 == 0
@@ -333,7 +319,19 @@ proc list(addon: Addon) =
   t.write(1, addon.line, true, colors, style,
     fgCyan, &"{addon.id:<3}",
     fgDefault, &"{addon.name:<32}",
-    fgRed, pin,
     fgGreen, &"{addon.prettyVersion():<10}",
     fgCyan, &"{kind:<10}",
     fgBlue, &"{branch:<10}")
+  t.write(36, addon.line, false, colors, style, fgRed, pin, resetStyle)
+
+proc toJsonHook*(a: Addon): JsonNode =
+  result = newJObject()
+  result["project"] = %a.project
+  if a.branch.isSome():
+    result["branch"] = %a.branch.get()
+  result["name"] = %a.name
+  result["kind"] = %a.kind
+  result["version"] = %a.version
+  result["id"] = %a.id
+  result["dirs"] = %a.dirs
+  result["time"] = %a.time.format("yyyy-MM-dd'T'HH:mm")
