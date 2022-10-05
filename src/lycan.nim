@@ -10,6 +10,7 @@ import std/re
 import std/sequtils
 import std/strutils
 import std/sugar
+import std/algorithm
 
 import addon
 import config
@@ -28,8 +29,10 @@ proc assignIds(addons: seq[Addon]) =
       addon.id = id
       incl(ids, id)
 
-proc writeAddons(addons: seq[Addon]) =
-  let addonsJson = addons.toJson(opt = ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
+proc writeAddons(addons: var seq[Addon]) =
+  if len(addons) == 0: return
+  addons.sort((a, z) => int(a.name < z.name))
+  let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
   let prettyJson = beautify($addonsJson)
   let file = open(configData.addonJsonFile, fmWrite)
   write(file, prettyJson)
@@ -104,7 +107,6 @@ var opt = initOptParser(
 )
 
 proc installAll(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
-  for _ in 0 .. len(addons): echo ""
   var futures: seq[Future[Option[Addon]]]
   for addon in addons:
     futures.add(addon.install())
@@ -115,11 +117,16 @@ proc installAll(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
   return addons
 
 proc removeAll(addons: seq[Addon]): seq[Addon] =
-  for _ in 0 .. len(addons): echo ""
   var removed: seq[Addon]
   for addon in addons:
     removed.add(addon.uninstall())
   return removed
+
+proc pinToggleAll(addons: seq[Addon]): seq[Addon] =
+  var pinned: seq[Addon]
+  for addon in addons:
+    pinned.add(addon.pinToggle())
+  return pinned
 
 var action: Action = DoUpdate
 var args: seq[string]
@@ -150,55 +157,58 @@ for kind, key, val in opt.getopt():
 var 
   addons: seq[Addon]
   line = 0
+  ids: seq[int16]
 case action
-  of DoInstall:
-    for arg in args:
-      var addon = addonFromUrl(arg)
-      if addon.isSome:
-        var a = addon.get()
-        a.line = line
-        addons.add(a)
-        line += 1
-  of DoUpdate:
-    for addon in configData.addons:
-      addon.line = line
-      addons.add(addon)
+of DoInstall:
+  for arg in args:
+    var addon = addonFromUrl(arg)
+    if addon.isSome:
+      var a = addon.get()
+      a.line = line
+      addons.add(a)
       line += 1
-  of DoRemove:
-    var ids: seq[int16]
-    for arg in args:
-      try:
-        ids.add(int16(arg.parseInt()))
-      except:
-        continue
-    for id in ids:
-      var addon = addonFromId(id)
-      if addon.isSome:
-        var a = addon.get()
-        a.line = line
-        addons.add(a)
-        line += 1
-  of DoPin: echo "TODO pin"
-  of DoUnpin: echo "TODO unpin"
-  of DoRestore: echo "TODO restore"
-  of DoList: echo "TODO list"
+of DoUpdate:
+  for addon in configData.addons:
+    addon.line = line
+    addons.add(addon)
+    line += 1
+of DoRemove, DoPin, DoUnpin:
+  for arg in args:
+    try:
+      ids.add(int16(arg.parseInt()))
+    except:
+      continue
+  for id in ids:
+    var addon = addonFromId(id)
+    if addon.isSome:
+      var a = addon.get()
+      a.line = line
+      addons.add(a)
+      line += 1
+of DoList: echo "TODO list"
+of DoRestore: echo "TODO restore"
+
+
+
+var final: seq[Addon]
 
 case action
-  of DoInstall, DoUpdate:
-    let updates = waitFor addons.installAll()
-    # let noupdates = configData.addons.filter(proc (addon: Addon): bool = addon notin updates)
-    let noupdates = configData.addons.filter(addon => addon notin updates)
-    let final = concat(updates, noupdates)
-    assignIds(final)
-    # writeAddons(final)
-  of DoRemove:
-    let removed = addons.removeAll()
-    let final = configData.addons.filter(addon => addon notin removed)
-    # writeAddons(final)
-  of DoPin: echo "TODO pin"
-  of DoUnpin: echo "TODO unpin"
-  of DoRestore: echo "TODO restore"
-  of DoList: echo "TODO list"
+of DoInstall, DoUpdate:
+  let updates = waitFor addons.installAll()
+  let noupdates = configData.addons.filter(addon => addon notin updates)
+  final = concat(updates, noupdates)
+  assignIds(final)
+of DoRemove:
+  let removed = addons.removeAll()
+  final = configData.addons.filter(addon => addon notin removed)
+of DoPin, DoUnpin:
+  let toggled = addons.pinToggleAll()
+  let rest = configData.addons.filter(addon => addon notin toggled)
+  final = concat(toggled, rest)
+of DoList: echo "TODO list"
+of DoRestore: echo "TODO restore"
+
+writeAddons(final)
 
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
 # addons folder is <WoW>\_retail_\Interface\AddOns

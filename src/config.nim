@@ -36,6 +36,7 @@ proc fromJsonHook(a: var Addon, j: JsonNode) =
   a.name = j["name"].getStr()
   a.dirs = d
   a.id = int16(j["id"].getInt())
+  a.pinned = j["pinned"].getBool()
 
 proc parseInstalledAddons(filename: string): seq[Addon] =
   if not fileExists(filename):

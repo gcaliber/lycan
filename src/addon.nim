@@ -53,6 +53,7 @@ proc prettyOldVersion(addon: Addon): string =
 const DARK_GREY: Color = Color(0x20_20_20)
 const LIGHT_GREY: Color = Color(0x34_34_34)
 
+
 proc stateMessage(addon: Addon) = 
   let 
     t = configData.term
@@ -82,6 +83,9 @@ proc stateMessage(addon: Addon) =
   of Removing, Removed:
       t.write(indent, addon.line, true, colors, style,
       fgYellow, &"{$addon.state:<12}", fgDefault, &"{name:<32}", resetStyle)
+  of Pinned, Unpinned:
+      t.write(indent, addon.line, true, colors, style,
+      fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}", resetStyle)
   of Failed:
     t.write(indent, addon.line, true, colors, style,
       fgRed, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
@@ -295,6 +299,10 @@ proc uninstall*(addon: Addon): Addon =
   addon.setAddonState(Removing)
   addon.removeFiles()
   addon.setAddonState(Removed)
+  return addon
+
+proc pinToggle*(addon: Addon): Addon =
+  addon.pinned = not addon.pinned
   return addon
 
 proc toJsonHook*(a: Addon): JsonNode =

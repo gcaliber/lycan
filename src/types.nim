@@ -14,6 +14,8 @@ type
     AlreadyUpdated = "Finished",
     Failed = "Failed",
     # BackingUp = "Backing up",
+    Pinned = "Pinned",
+    Unpinned = "Unpinned",
     Removing = "Removing",
     Removed = "Removed",
   
@@ -43,6 +45,7 @@ type
     filename*: string
     extractDir*: string
     line*: int
+    pinned*: bool
 
   Term* = ref object
     f*: File
