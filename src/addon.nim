@@ -53,7 +53,6 @@ proc prettyOldVersion(addon: Addon): string =
 const DARK_GREY: Color = Color(0x20_20_20)
 const LIGHT_GREY: Color = Color(0x34_34_34)
 
-
 proc stateMessage(addon: Addon) = 
   let 
     t = configData.term
@@ -76,15 +75,15 @@ proc stateMessage(addon: Addon) =
     t.write(indent, addon.line, true, colors, style,
       fgGreen, &"{addon.line} {$addon.state:<12}", fgDefault, &"{name:<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
-  of AlreadyUpdated:
-      t.write(indent, addon.line, true, colors, style,
+  of FinishedAlreadyCurrent:
+    t.write(indent, addon.line, true, colors, style,
       fgGreen, &"{addon.line} {$addon.state:<12}", fgDefault, &"{name:<32}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
-  of Removed:
-      t.write(indent, addon.line, true, colors, style,
+  of Removed, Pinned:
+    t.write(indent, addon.line, true, colors, style,
       fgYellow, &"{$addon.state:<12}", fgDefault, &"{name:<32}", resetStyle)
-  of Pinned, Unpinned:
-      t.write(indent, addon.line, true, colors, style,
+  of Unpinned:
+    t.write(indent, addon.line, true, colors, style,
       fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}", resetStyle)
   of Failed:
     t.write(indent, addon.line, true, colors, style,
@@ -276,6 +275,9 @@ proc getLatestJson(addon: Addon): Future[JsonNode] {.async.} =
     return parseJson(body)
 
 proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
+  if addon.pinned:
+    addon.setAddonState(Pinned)
+    return none(Addon)
   addon.setAddonState(Checking)
   let json = await addon.getLatestJson()
   addon.setAddonState(Parsing)
@@ -318,3 +320,20 @@ proc toJsonHook*(a: Addon): JsonNode =
   result["version"] = %a.version
   result["id"] = %a.id
   result["dirs"] = %a.dirs
+
+proc list(addon: Addon) =
+  let
+    t = configData.term
+    even = addon.line mod 2 == 0
+    colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
+    style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
+    kind = if addon.kind == TukuiMain or addon.kind == TukuiAddon: "Tukui" else: $addon.kind
+    pin = if addon.pinned: "!" else: ""
+    branch = if addon.kind == GithubRepo: addon.branch.get() else: ""
+  t.write(1, addon.line, true, colors, style,
+    fgCyan, &"{addon.id:<3}",
+    fgDefault, &"{addon.name:<32}",
+    fgRed, pin,
+    fgGreen, &"{addon.prettyVersion():<10}",
+    fgCyan, &"{kind:<10}",
+    fgBlue, &"{branch:<10}")

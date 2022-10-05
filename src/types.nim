@@ -3,7 +3,7 @@ import std/options
 
 type
   Action* = enum
-    DoInstall, DoUpdate, DoRemove, DoList, DoPin, DoUnpin, DoRestore
+    Install, Update, Remove, List, Pin, Unpin, Restore, Nothing
 
   AddonState* = enum
     Checking = "Checking",

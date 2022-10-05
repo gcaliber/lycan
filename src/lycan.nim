@@ -102,8 +102,8 @@ proc displayHelp() =
 
 var opt = initOptParser(
   commandLineParams(), 
-  shortNoVal = {'h', 'l', 'u', 'i', 'a'}, 
-  longNoVal = @["help", "list", "update"]
+  shortNoVal = {'h', 'u', 'i', 'a'}, 
+  longNoVal = @["help", "update"]
 )
 
 proc installAll(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
@@ -128,38 +128,42 @@ proc pinToggleAll(addons: seq[Addon]): seq[Addon] =
     pinned.add(addon.pinToggle())
   return pinned
 
-var action: Action = DoUpdate
+var action: Action = Nothing
 var args: seq[string]
 for kind, key, val in opt.getopt():
+  let lastAction = action
   case kind
   of cmdShortOption, cmdLongOption:
     if val == "":
       case key:
-        of "h", "help": displayHelp()
-        of "a", "i": action = DoInstall
-        of "u": action = DoUpdate
-        of "r": action = DoRemove
-        of "l", "list": action = DoList
+        of "a", "i": action = Install
+        of "u": action = Update
+        of "r": action = Remove
+        of "l", "list": action = List
         else: displayHelp()
     else:
       args.add(val)
       case key:
-        of "add", "install": action = DoInstall
-        of "remove": action = DoRemove
-        of "pin": action = DoPin
-        of "unpin": action = DoUnpin
-        of "restore": action = DoRestore
+        of "add", "install": action = Install
+        of "update": action = Update
+        of "remove": action = Remove
+        of "pin": action = Pin
+        of "unpin": action = Unpin
+        of "restore": action = Restore
         else: displayHelp()
   of cmdArgument:
     args.add(key)
   else: displayHelp()
+  if action != Nothing and lastAction != Nothing:
+    echo "One thing at a time, bruh."
+    displayHelp()
 
 var 
   addons: seq[Addon]
   line = 0
   ids: seq[int16]
 case action
-of DoInstall:
+of Install:
   for arg in args:
     var addon = addonFromUrl(arg)
     if addon.isSome:
@@ -167,12 +171,12 @@ of DoInstall:
       a.line = line
       addons.add(a)
       line += 1
-of DoUpdate:
+of Update:
   for addon in configData.addons:
     addon.line = line
     addons.add(addon)
     line += 1
-of DoRemove, DoPin, DoUnpin:
+of Remove, Pin, Unpin:
   for arg in args:
     try:
       ids.add(int16(arg.parseInt()))
@@ -185,28 +189,27 @@ of DoRemove, DoPin, DoUnpin:
       a.line = line
       addons.add(a)
       line += 1
-of DoList: echo "TODO list"
-of DoRestore: echo "TODO restore"
-
-
+of List: echo "TODO list"
+of Restore: echo "TODO restore"
 
 var final: seq[Addon]
 
 case action
-of DoInstall, DoUpdate:
+of Install, Update:
   let updates = waitFor addons.installAll()
   let noupdates = configData.addons.filter(addon => addon notin updates)
   final = concat(updates, noupdates)
   assignIds(final)
-of DoRemove:
+of Remove:
   let removed = addons.removeAll()
   final = configData.addons.filter(addon => addon notin removed)
-of DoPin, DoUnpin:
+of Pin, Unpin:
   let toggled = addons.pinToggleAll()
   let rest = configData.addons.filter(addon => addon notin toggled)
   final = concat(toggled, rest)
-of DoList: echo "TODO list"
-of DoRestore: echo "TODO restore"
+of Restore: echo "TODO restore"
+else:
+  discard
 
 writeAddons(final)
 
