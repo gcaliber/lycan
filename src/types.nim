@@ -11,7 +11,7 @@ type
     Downloading = "Downloading",
     Installing = "Installing",
     Finished = "Finished",
-    AlreadyUpdated = "Finished",
+    FinishedAlreadyCurrent = "Finished",
     Failed = "Failed",
     # BackingUp = "Backing up",
     Pinned = "Pinned",

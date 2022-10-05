@@ -292,7 +292,7 @@ proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
       return none(Addon)
     return some(addon)
   else:
-    addon.setAddonState(AlreadyUpdated)
+    addon.setAddonState(FinishedAlreadyCurrent)
     return none(Addon)
 
 proc uninstall*(addon: Addon): Addon =
