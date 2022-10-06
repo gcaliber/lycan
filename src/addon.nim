@@ -314,14 +314,17 @@ proc list*(addon: Addon) =
     even = addon.line mod 2 == 0
     colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
     style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
-    kind = if addon.kind == TukuiMain or addon.kind == TukuiAddon: "Tukui" else: $addon.kind
+    kind = case addon.kind 
+      of TukuiMain, TukuiAddon: "Tukui"
+      of GithubRepo: "Github"
+      else: $addon.kind
     pin = if addon.pinned: "!" else: ""
-    branch = if addon.kind == GithubRepo: addon.branch.get() else: ""
+    branch = if addon.kind == GithubRepo: "@" & addon.branch.get() else: ""
   t.write(1, addon.line, true, colors, style,
-    fgCyan, &"{addon.id:<3}",
+    fgBlue, &"{addon.id:<3}",
     fgDefault, &"{addon.name:<32}",
-    fgGreen, &"{addon.prettyVersion():<10}",
-    fgCyan, &"{kind:<10}",
+    fgGreen, &"{addon.prettyVersion():<15}",
+    fgCyan, &"{kind:<6}",
     fgBlue, &"{branch:<10}")
   t.write(36, addon.line, false, colors, style, fgRed, pin, resetStyle)
 

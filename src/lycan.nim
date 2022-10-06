@@ -32,7 +32,7 @@ proc assignIds(addons: seq[Addon]) =
 
 proc writeAddons(addons: var seq[Addon]) =
   if len(addons) == 0: return
-  addons.sort((a, z) => a.name > z.name)
+  addons.sort((a, z) => a.name.toLower() > z.name.toLower())
   let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
   let prettyJson = beautify($addonsJson)
   let file = open(configData.addonJsonFile, fmWrite)
