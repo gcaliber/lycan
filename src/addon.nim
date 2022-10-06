@@ -10,12 +10,14 @@ import std/re
 import std/strformat
 import std/strutils
 import std/terminal
+import std/times
 
 import zip/zipfiles
 
 import config
 import types
 import term
+
 
 proc `==`*(a, b: Addon): bool {.inline.} =
   a.project == b.project
@@ -25,6 +27,10 @@ proc newAddon*(project: string, kind: AddonKind, branch: Option[string] = none(s
   result.project = project
   result.kind = kind
   result.branch = branch
+<<<<<<< HEAD
+=======
+  result.time = now()
+>>>>>>> 0bb0ec6b3ca8800189afacf4a75f1fffdb1a91f8
 
 proc prettyVersion(addon: Addon): string =
   if addon.version.isEmptyOrWhitespace: 
@@ -69,13 +75,22 @@ proc stateMessage(addon: Addon) =
     t.write(indent, addon.line, true, colors, style,
       fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
+<<<<<<< HEAD
   of AlreadyUpdated:
       t.write(indent, addon.line, true, colors, style,
       fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+=======
+  of FinishedAlreadyCurrent:
+    t.write(indent, addon.line, true, colors, style,
+      fgGreen, &"{addon.line} {$addon.state:<12}", fgDefault, &"{name:<32}",
+>>>>>>> 0bb0ec6b3ca8800189afacf4a75f1fffdb1a91f8
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
-  of Removing, Removed:
-      t.write(indent, addon.line, true, colors, style,
+  of Removed, Pinned:
+    t.write(indent, addon.line, true, colors, style,
       fgYellow, &"{$addon.state:<12}", fgDefault, &"{name:<32}", resetStyle)
+  of Unpinned:
+    t.write(indent, addon.line, true, colors, style,
+      fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}", resetStyle)
   of Failed:
     t.write(indent, addon.line, true, colors, style,
       fgRed, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
@@ -266,6 +281,9 @@ proc getLatestJson(addon: Addon): Future[JsonNode] {.async.} =
     return parseJson(body)
 
 proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
+  if addon.pinned:
+    addon.setAddonState(Pinned)
+    return none(Addon)
   addon.setAddonState(Checking)
   let json = await addon.getLatestJson()
   addon.setAddonState(Parsing)
@@ -283,14 +301,38 @@ proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
       return none(Addon)
     return some(addon)
   else:
-    addon.setAddonState(AlreadyUpdated)
+    addon.setAddonState(FinishedAlreadyCurrent)
     return none(Addon)
 
 proc uninstall*(addon: Addon): Addon =
-  addon.setAddonState(Removing)
   addon.removeFiles()
   addon.setAddonState(Removed)
   return addon
+
+proc pinToggle*(addon: Addon): Addon =
+  addon.pinned = not addon.pinned
+  if addon.pinned:
+    addon.setAddonState(Pinned)
+  else:
+    addon.setAddonState(Unpinned)
+  return addon
+
+proc list*(addon: Addon) =
+  let
+    t = configData.term
+    even = addon.line mod 2 == 0
+    colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
+    style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
+    kind = if addon.kind == TukuiMain or addon.kind == TukuiAddon: "Tukui" else: $addon.kind
+    pin = if addon.pinned: "!" else: ""
+    branch = if addon.kind == GithubRepo: addon.branch.get() else: ""
+  t.write(1, addon.line, true, colors, style,
+    fgCyan, &"{addon.id:<3}",
+    fgDefault, &"{addon.name:<32}",
+    fgGreen, &"{addon.prettyVersion():<10}",
+    fgCyan, &"{kind:<10}",
+    fgBlue, &"{branch:<10}")
+  t.write(36, addon.line, false, colors, style, fgRed, pin, resetStyle)
 
 proc toJsonHook*(a: Addon): JsonNode =
   result = newJObject()
@@ -302,3 +344,4 @@ proc toJsonHook*(a: Addon): JsonNode =
   result["version"] = %a.version
   result["id"] = %a.id
   result["dirs"] = %a.dirs
+  result["time"] = %a.time.format("yyyy-MM-dd'T'HH:mm")

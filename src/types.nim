@@ -1,9 +1,10 @@
 import std/json
 import std/options
+import std/times
 
 type
   Action* = enum
-    DoInstall, DoUpdate, DoRemove, DoList, DoPin, DoUnpin, DoRestore
+    Install, Update, Remove, List, Pin, Unpin, Restore, Nothing
 
   AddonState* = enum
     Checking = "Checking",
@@ -11,10 +12,11 @@ type
     Downloading = "Downloading",
     Installing = "Installing",
     Finished = "Finished",
-    AlreadyUpdated = "Finished",
+    FinishedAlreadyCurrent = "Finished",
     Failed = "Failed",
     # BackingUp = "Backing up",
-    Removing = "Removing",
+    Pinned = "Pinned",
+    Unpinned = "Unpinned",
     Removed = "Removed",
   
   AddonKind* = enum
@@ -43,6 +45,8 @@ type
     filename*: string
     extractDir*: string
     line*: int
+    pinned*: bool
+    time*: DateTime
 
   Term* = ref object
     f*: File

@@ -4,6 +4,7 @@ import std/options
 import std/os
 import std/json
 import std/jsonutils
+import std/times
 
 import types
 import term
@@ -36,6 +37,8 @@ proc fromJsonHook(a: var Addon, j: JsonNode) =
   a.name = j["name"].getStr()
   a.dirs = d
   a.id = int16(j["id"].getInt())
+  a.pinned = j["pinned"].getBool()
+  a.time = parse(j["time"].getStr(), "yyyy-MM-dd'T'HH:mm")
 
 proc parseInstalledAddons(filename: string): seq[Addon] =
   if not fileExists(filename):

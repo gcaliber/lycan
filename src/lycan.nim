@@ -1,5 +1,6 @@
 import print
 
+import std/algorithm
 import std/asyncdispatch
 import std/json
 import std/jsonutils
@@ -10,6 +11,7 @@ import std/re
 import std/sequtils
 import std/strutils
 import std/sugar
+import std/times
 
 import addon
 import config
@@ -28,8 +30,10 @@ proc assignIds(addons: seq[Addon]) =
       addon.id = id
       incl(ids, id)
 
-proc writeAddons(addons: seq[Addon]) =
-  let addonsJson = addons.toJson(opt = ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
+proc writeAddons(addons: var seq[Addon]) =
+  if len(addons) == 0: return
+  addons.sort((a, z) => a.name > z.name)
+  let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
   let prettyJson = beautify($addonsJson)
   let file = open(configData.addonJsonFile, fmWrite)
   write(file, prettyJson)
@@ -99,8 +103,8 @@ proc displayHelp() =
 
 var opt = initOptParser(
   commandLineParams(), 
-  shortNoVal = {'h', 'l', 'u', 'i', 'a'}, 
-  longNoVal = @["help", "list", "update"]
+  shortNoVal = {'h', 'u', 'i', 'a'}, 
+  longNoVal = @["help", "update"]
 )
 
 proc installAll(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
@@ -119,83 +123,105 @@ proc removeAll(addons: seq[Addon]): seq[Addon] =
     removed.add(addon.uninstall())
   return removed
 
-var action: Action = DoUpdate
+proc pinToggleAll(addons: seq[Addon]): seq[Addon] =
+  var pinned: seq[Addon]
+  for addon in addons:
+    pinned.add(addon.pinToggle())
+  return pinned
+
+var action: Action = Nothing
 var args: seq[string]
 for kind, key, val in opt.getopt():
+  let lastAction = action
   case kind
   of cmdShortOption, cmdLongOption:
     if val == "":
       case key:
-        of "h", "help": displayHelp()
-        of "a", "i": action = DoInstall
-        of "u": action = DoUpdate
-        of "r": action = DoRemove
-        of "l", "list": action = DoList
+        of "a", "i": action = Install
+        of "u": action = Update
+        of "r": action = Remove
+        of "l", "list": action = List
         else: displayHelp()
     else:
       args.add(val)
       case key:
-        of "add", "install": action = DoInstall
-        of "remove": action = DoRemove
-        of "pin": action = DoPin
-        of "unpin": action = DoUnpin
-        of "restore": action = DoRestore
+        of "add", "install": action = Install
+        of "update": action = Update
+        of "remove": action = Remove
+        of "pin": action = Pin
+        of "unpin": action = Unpin
+        of "restore": action = Restore
         else: displayHelp()
   of cmdArgument:
     args.add(key)
   else: displayHelp()
+  if action != Nothing and lastAction != Nothing:
+    echo "One thing at a time, bruh."
+    displayHelp()
 
 var 
   addons: seq[Addon]
   line = 0
+  ids: seq[int16]
 case action
-  of DoInstall:
-    for arg in args:
-      var addon = addonFromUrl(arg)
-      if addon.isSome:
-        var a = addon.get()
-        a.line = line
-        addons.add(a)
-        line += 1
-  of DoUpdate:
-    for addon in configData.addons:
-      addon.line = line
-      addons.add(addon)
+of Install:
+  for arg in args:
+    var addon = addonFromUrl(arg)
+    if addon.isSome:
+      var a = addon.get()
+      a.line = line
+      addons.add(a)
       line += 1
-  of DoRemove:
-    var ids: seq[int16]
-    for arg in args:
-      try:
-        ids.add(int16(arg.parseInt()))
-      except:
-        continue
-    for id in ids:
-      var addon = addonFromId(id)
-      if addon.isSome:
-        var a = addon.get()
-        a.line = line
-        addons.add(a)
-        line += 1
-  of DoPin: echo "TODO pin"
-  of DoUnpin: echo "TODO unpin"
-  of DoRestore: echo "TODO restore"
-  of DoList: echo "TODO list"
+of Update, Nothing:
+  for addon in configData.addons:
+    addon.line = line
+    addons.add(addon)
+    line += 1
+of Remove, Pin, Unpin:
+  for arg in args:
+    try:
+      ids.add(int16(arg.parseInt()))
+    except:
+      continue
+  for id in ids:
+    var addon = addonFromId(id)
+    if addon.isSome:
+      var a = addon.get()
+      a.line = line
+      addons.add(a)
+      line += 1
+of List:
+  addons = configData.addons
+  if "t" in args or "time" in args:
+    addons.sort((a, z) => a.time < z.time)
+  for addon in addons:
+    addon.line = line
+    line += 1
+of Restore: echo "TODO restore"
+
+var final: seq[Addon]
 
 case action
-  of DoInstall, DoUpdate:
-    let updates = waitFor addons.installAll()
-    let noupdates = configData.addons.filter(addon => addon notin updates)
-    let final = concat(updates, noupdates)
-    assignIds(final)
-    writeAddons(final)
-  of DoRemove:
-    let removed = addons.removeAll()
-    let final = configData.addons.filter(addon => addon notin removed)
-    writeAddons(final)
-  of DoPin: echo "TODO pin"
-  of DoUnpin: echo "TODO unpin"
-  of DoRestore: echo "TODO restore"
-  of DoList: echo "TODO list"
+of Install, Update:
+  let updates = waitFor addons.installAll()
+  let noupdates = configData.addons.filter(addon => addon notin updates)
+  final = concat(updates, noupdates)
+  assignIds(final)
+of Remove:
+  let removed = addons.removeAll()
+  final = configData.addons.filter(addon => addon notin removed)
+of Pin, Unpin:
+  let toggled = addons.pinToggleAll()
+  let rest = configData.addons.filter(addon => addon notin toggled)
+  final = concat(toggled, rest)
+of List: 
+  addons.apply(list)
+  quit()
+of Restore: echo "TODO restore"
+else:
+  discard
+
+writeAddons(final)
 
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
 # addons folder is <WoW>\_retail_\Interface\AddOns
