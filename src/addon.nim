@@ -20,17 +20,11 @@ import term
 proc `==`*(a, b: Addon): bool {.inline.} =
   a.project == b.project
 
-proc newAddon*(project: string, kind: AddonKind, 
-              name: string = "", version: string = "", dirs: seq[string] = @[], branch: Option[string] = none(string)): Addon =
-  var a = new(Addon)
-  a.project = project
-  a.name = name
-  a.kind = kind
-  a.version = version
-  a.dirs = dirs
-  a.branch = branch
-  result = a
-
+proc newAddon*(project: string, kind: AddonKind, branch: Option[string] = none(string)): Addon =
+  result = new(Addon)
+  result.project = project
+  result.kind = kind
+  result.branch = branch
 
 proc prettyVersion(addon: Addon): string =
   if addon.version.isEmptyOrWhitespace: 
@@ -262,7 +256,7 @@ proc getLatestJson(addon: Addon): Future[JsonNode] {.async.} =
       let body = await response.body
       configData.tukuiCache = parseJson(body)
     for node in configData.tukuiCache:
-      if node["id"].getStr().strip(chars = {'"'}) == addon.project:
+      if node["id"].getStr() == addon.project:
         return node
     addon.setAddonState(Failed)
     return new(JsonNode)

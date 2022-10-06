@@ -41,12 +41,10 @@ proc parseInstalledAddons(filename: string): seq[Addon] =
   if not fileExists(filename):
     return @[]
   let addonsJson = parseJson(readFile(filename))
-  var addons: seq[Addon]
   for addon in addonsJson:
     var a = new(Addon)
     a.fromJson(addon)
-    addons.add(a)
-  return addons
+    result.add(a)
 
 var configData* = Config(
   mode: mode,

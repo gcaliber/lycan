@@ -16,8 +16,7 @@ proc moveTo(t: Term, x, y: int, erase: bool) =
     while i < t.yMax and i < y:
       t.f.cursorDown()
       i += 1
-    if i < y:
-      newLine = true
+    if i < y: newLine = true
     while i < y:
       t.f.write("\n")
       i += 1
