@@ -27,10 +27,7 @@ proc newAddon*(project: string, kind: AddonKind, branch: Option[string] = none(s
   result.project = project
   result.kind = kind
   result.branch = branch
-<<<<<<< HEAD
-=======
   result.time = now()
->>>>>>> 0bb0ec6b3ca8800189afacf4a75f1fffdb1a91f8
 
 proc prettyVersion(addon: Addon): string =
   if addon.version.isEmptyOrWhitespace: 
@@ -75,15 +72,9 @@ proc stateMessage(addon: Addon) =
     t.write(indent, addon.line, true, colors, style,
       fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
-<<<<<<< HEAD
-  of AlreadyUpdated:
-      t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
-=======
   of FinishedAlreadyCurrent:
     t.write(indent, addon.line, true, colors, style,
       fgGreen, &"{addon.line} {$addon.state:<12}", fgDefault, &"{name:<32}",
->>>>>>> 0bb0ec6b3ca8800189afacf4a75f1fffdb1a91f8
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Removed, Pinned:
     t.write(indent, addon.line, true, colors, style,
@@ -343,5 +334,6 @@ proc toJsonHook*(a: Addon): JsonNode =
   result["kind"] = %a.kind
   result["version"] = %a.version
   result["id"] = %a.id
+  result["pinned"] = %a.pinned
   result["dirs"] = %a.dirs
   result["time"] = %a.time.format("yyyy-MM-dd'T'HH:mm")
