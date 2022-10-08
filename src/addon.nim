@@ -27,25 +27,18 @@ proc newAddon*(project: string, kind: AddonKind, branch: Option[string] = none(s
   result.project = project
   result.kind = kind
   result.branch = branch
-  result.time = now()
 
 proc prettyVersion(addon: Addon): string =
-  if addon.version.isEmptyOrWhitespace: 
-    return ""
+  if addon.version.isEmptyOrWhitespace: return ""
   case addon.kind
-  of GithubRepo:
-    return addon.version[0 ..< 7]
-  else:
-    return addon.version
+  of GithubRepo: return addon.version[0 ..< 7]
+  else: return addon.version
 
 proc prettyOldVersion(addon: Addon): string =
-  if addon.oldVersion.isEmptyOrWhitespace: 
-    return ""
+  if addon.oldVersion.isEmptyOrWhitespace: return ""
   case addon.kind
-  of GithubRepo:
-    return addon.oldVersion[0 ..< 7]
-  else:
-    return addon.oldVersion
+  of GithubRepo: return addon.oldVersion[0 ..< 7]
+  else: return addon.oldVersion
 
 const DARK_GREY: Color = Color(0x20_20_20)
 const LIGHT_GREY: Color = Color(0x34_34_34)
@@ -280,6 +273,7 @@ proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
   addon.setAddonState(Parsing)
   addon.setVersion(json)
   if addon.version != addon.oldVersion:
+    addon.time = now()
     addon.setDownloadUrl(json)
     addon.setName(json)
     addon.setAddonState(Downloading)
