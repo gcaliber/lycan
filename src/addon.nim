@@ -246,6 +246,16 @@ proc moveDirs(addon: Addon) =
     let destination = joinPath(configData.installDir, name)
     moveDir(dir, destination)
 
+proc backup(addon: Addon) =
+  let 
+    z = ZipArchive
+    backupName = addon.
+
+  if not z.open(backupName, fmWrite):
+    addon.setAddonState(Failed)
+    return
+  let source = configData.installDir
+
 proc unzip(addon: Addon) =
   var z: ZipArchive
   if not z.open(addon.filename):
@@ -282,9 +292,11 @@ proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
   if addon.version != addon.oldVersion:
     addon.setDownloadUrl(json)
     addon.setName(json)
+    addon.setAddonState(Downloading)
     await addon.download()
     addon.setAddonState(Installing)
     addon.unzip()
+    addon.backup()
     addon.moveDirs()
     addon.setAddonState(Finished)
     if addon.state == Failed:
