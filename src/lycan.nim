@@ -32,7 +32,7 @@ proc assignIds(addons: seq[Addon]) =
 
 proc writeAddons(addons: var seq[Addon]) =
   if len(addons) == 0: return
-  addons.sort((a, z) => a.name > z.name)
+  addons.sort((a, z) => a.name.toLower() > z.name.toLower())
   let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
   let prettyJson = beautify($addonsJson)
   let file = open(configData.addonJsonFile, fmWrite)
@@ -129,34 +129,36 @@ proc pinToggleAll(addons: seq[Addon]): seq[Addon] =
     pinned.add(addon.pinToggle())
   return pinned
 
-var action: Action = Nothing
-var args: seq[string]
+var 
+  action = Nothing
+  actionCount = 0
+  args: seq[string]
 for kind, key, val in opt.getopt():
-  let lastAction = action
   case kind
   of cmdShortOption, cmdLongOption:
     if val == "":
       case key:
-        of "a", "i": action = Install
-        of "u": action = Update
-        of "r": action = Remove
-        of "l", "list": action = List
+        of "a", "i":          action = Install; actionCount += 1
+        of "u":               action = Update; actionCount += 1
+        of "r":               action = Remove; actionCount += 1
+        of "l", "list":       action = List; actionCount += 1
         else: displayHelp()
     else:
       args.add(val)
       case key:
-        of "add", "install": action = Install
-        of "update": action = Update
-        of "remove": action = Remove
-        of "pin": action = Pin
-        of "unpin": action = Unpin
-        of "restore": action = Restore
+        of "add", "install":  action = Install; actionCount += 1
+        of "update":          action = Update; actionCount += 1
+        of "remove":          action = Remove; actionCount += 1
+        of "pin":             action = Pin; actionCount += 1
+        of "unpin":           action = Unpin; actionCount += 1
+        of "restore":         action = Restore; actionCount += 1
         else: displayHelp()
   of cmdArgument:
     args.add(key)
-  else: displayHelp()
-  if action != Nothing and lastAction != Nothing:
-    echo "One thing at a time, bruh."
+  else:
+    displayHelp()
+  if actionCount > 1:
+    echo "One thing at a time, bruh"
     displayHelp()
 
 var 

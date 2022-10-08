@@ -27,25 +27,18 @@ proc newAddon*(project: string, kind: AddonKind, branch: Option[string] = none(s
   result.project = project
   result.kind = kind
   result.branch = branch
-  result.time = now()
 
 proc prettyVersion(addon: Addon): string =
-  if addon.version.isEmptyOrWhitespace: 
-    return ""
+  if addon.version.isEmptyOrWhitespace: return ""
   case addon.kind
-  of GithubRepo:
-    return addon.version[0 ..< 7]
-  else:
-    return addon.version
+  of GithubRepo: return addon.version[0 ..< 7]
+  else: return addon.version
 
 proc prettyOldVersion(addon: Addon): string =
-  if addon.oldVersion.isEmptyOrWhitespace: 
-    return ""
+  if addon.oldVersion.isEmptyOrWhitespace: return ""
   case addon.kind
-  of GithubRepo:
-    return addon.oldVersion[0 ..< 7]
-  else:
-    return addon.oldVersion
+  of GithubRepo: return addon.oldVersion[0 ..< 7]
+  else: return addon.oldVersion
 
 const DARK_GREY: Color = Color(0x20_20_20)
 const LIGHT_GREY: Color = Color(0x34_34_34)
@@ -62,15 +55,15 @@ proc stateMessage(addon: Addon) =
   case addon.state
   of Checking, Parsing:
     t.write(indent, addon.line, true, colors, style,
-      fgCyan, &"{addon.line} {$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgCyan, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
       fgYellow, &"{addon.prettyOldVersion()}", resetStyle)
   of Downloading, Installing:
     t.write(indent, addon.line, true, colors, style,
-      fgCyan, &"{addon.line} {$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgCyan, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Finished:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{addon.line} {$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of FinishedAlreadyCurrent:
     t.write(indent, addon.line, true, colors, style,
@@ -272,7 +265,7 @@ proc getLatestJson(addon: Addon): Future[JsonNode] {.async.} =
       let body = await response.body
       configData.tukuiCache = parseJson(body)
     for node in configData.tukuiCache:
-      if node["id"].getStr().strip(chars = {'"'}) == addon.project:
+      if node["id"].getStr() == addon.project:
         return node
     addon.setAddonState(Failed)
     return new(JsonNode)
@@ -290,6 +283,7 @@ proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
   addon.setAddonState(Parsing)
   addon.setVersion(json)
   if addon.version != addon.oldVersion:
+    addon.time = now()
     addon.setDownloadUrl(json)
     addon.setName(json)
     addon.setAddonState(Downloading)
@@ -325,14 +319,17 @@ proc list*(addon: Addon) =
     even = addon.line mod 2 == 0
     colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
     style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
-    kind = if addon.kind == TukuiMain or addon.kind == TukuiAddon: "Tukui" else: $addon.kind
+    kind = case addon.kind 
+      of TukuiMain, TukuiAddon: "Tukui"
+      of GithubRepo: "Github"
+      else: $addon.kind
     pin = if addon.pinned: "!" else: ""
-    branch = if addon.kind == GithubRepo: addon.branch.get() else: ""
+    branch = if addon.kind == GithubRepo: "@" & addon.branch.get() else: ""
   t.write(1, addon.line, true, colors, style,
-    fgCyan, &"{addon.id:<3}",
+    fgBlue, &"{addon.id:<3}",
     fgDefault, &"{addon.name:<32}",
-    fgGreen, &"{addon.prettyVersion():<10}",
-    fgCyan, &"{kind:<10}",
+    fgGreen, &"{addon.prettyVersion():<15}",
+    fgCyan, &"{kind:<6}",
     fgBlue, &"{branch:<10}")
   t.write(36, addon.line, false, colors, style, fgRed, pin, resetStyle)
 
@@ -345,5 +342,6 @@ proc toJsonHook*(a: Addon): JsonNode =
   result["kind"] = %a.kind
   result["version"] = %a.version
   result["id"] = %a.id
+  result["pinned"] = %a.pinned
   result["dirs"] = %a.dirs
   result["time"] = %a.time.format("yyyy-MM-dd'T'HH:mm")
