@@ -1,5 +1,3 @@
-import print
-
 import std/colors
 import std/asyncdispatch
 import std/httpclient
@@ -7,8 +5,10 @@ import std/json
 import std/options
 import std/os
 import std/re
+import std/sequtils
 import std/strformat
 import std/strutils
+import std/sugar
 import std/terminal
 import std/times
 
@@ -49,7 +49,7 @@ proc stateMessage(addon: Addon) =
     indent = 2
     name = if not addon.name.isEmptyOrWhitespace: addon.name else: $addon.kind & ':' & addon.project
     even = addon.line mod 2 == 0
-    arrow = if addon.old_version.isEmptyOrWhitespace: "" else: " > "
+    arrow = if addon.old_version.isEmptyOrWhitespace: "" else: "->"
     colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
     style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
   case addon.state
@@ -57,36 +57,50 @@ proc stateMessage(addon: Addon) =
     t.write(indent, addon.line, true, colors, style,
       fgCyan, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
       fgYellow, &"{addon.prettyOldVersion()}", resetStyle)
-  of Downloading, Installing:
+  of Downloading, Installing, Restoring:
     t.write(indent, addon.line, true, colors, style,
       fgCyan, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
-  of Finished:
+  of FinishedUpdated, FinishedInstalled:
     t.write(indent, addon.line, true, colors, style,
       fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of FinishedAlreadyCurrent:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{addon.line} {$addon.state:<12}", fgDefault, &"{name:<32}",
-      fgGreen, &"{addon.prettyVersion()}", resetStyle)
+      fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgYellow, &"{addon.prettyVersion()}", resetStyle)
+  of FinishedPinned:
+    t.write(indent, addon.line, true, colors, style,
+      fgYellow, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+      styleBright, fgRed, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", 
+      if addon.version != addon.oldVersion: fgGreen else: fgYellow,
+      &"{addon.prettyVersion()}", resetStyle)
   of Removed, Pinned:
     t.write(indent, addon.line, true, colors, style,
-      fgYellow, &"{$addon.state:<12}", fgDefault, &"{name:<32}", resetStyle)
+      fgYellow, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Unpinned:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}", resetStyle)
+      fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgGreen, &"{addon.prettyVersion()}", resetStyle)
+  of Restored:
+    t.write(indent, addon.line, true, colors, style,
+      fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Failed:
     t.write(indent, addon.line, true, colors, style,
       fgRed, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
 
-proc setAddonState(addon: Addon, state: AddonState, sendMessage: bool = true) =
+proc setAddonState(addon: Addon, state: AddonState, errorMessage: string = "", sendMessage: bool = true) =
   if addon.state != Failed:
     addon.state = state
+    configData.log.add(Error(addon: addon, msg: errorMessage))
   if sendMessage:
     addon.stateMessage()
 
 proc setName(addon: Addon, json: JsonNode) =
+  if addon.state == Failed: return
   case addon.kind
   of Github, GithubRepo, Gitlab:
     addon.name = addon.project.split('/')[^1]
@@ -96,6 +110,7 @@ proc setName(addon: Addon, json: JsonNode) =
     addon.name = json[0]["UIName"].getStr()
 
 proc setVersion(addon: Addon, json: JsonNode) =
+  if addon.state == Failed: return
   addon.old_version = addon.version
   case addon.kind
   of Github:
@@ -112,6 +127,7 @@ proc setVersion(addon: Addon, json: JsonNode) =
     addon.version = json[0]["UIVersion"].getStr()
 
 proc setDownloadUrl(addon: Addon, json: JsonNode) =
+  if addon.state == Failed: return
   case addon.kind
   of Github:
     let assets = json["assets"]
@@ -164,20 +180,28 @@ proc download(addon: Addon) {.async.} =
   let futureResponse = client.get(addon.downloadUrl)
   yield futureResponse
   if futureResponse.failed:
-    addon.setAddonState(Failed)
+    addon.setAddonState(Failed, &"No response: {addon.downloadUrl}")
     return
   let response = futureResponse.read()
+  if response.status != "200":
+    addon.setAddonState(Failed, &"Response {response.status}: {addon.downloadUrl}")
+    return
   var downloadName: string
   try:
     downloadName = response.headers["content-disposition"].split('=')[1].strip(chars = {'\'', '"'})
   except KeyError:
     downloadName = addon.downloadUrl.split('/')[^1]
   addon.filename = joinPath(configData.tempDir, downloadName)
-  let file = open(addon.filename, fmWrite)
+  var file: File
+  try:
+    file = open(addon.filename, fmWrite)
+  except CatchableError as e:
+    addon.setAddonState(Failed, e.msg)
+    return
   let futureBody = response.body
   yield futureBody
   if futureBody.failed:
-    addon.setAddonState(Failed)
+    addon.setAddonState(Failed, &"Download failed: {addon.downloadUrl}")
     return
   io.write(file, futureBody.read())
   close(file)
@@ -211,6 +235,7 @@ proc getAddonDirs(addon: Addon): seq[string] =
     let toc = processTocs(current)
     if not toc:
       let subdirs = getSubdirs(current)
+      assert len(subdirs) != 0 
       current = subdirs[0]
     else:
       if firstPass:
@@ -219,11 +244,21 @@ proc getAddonDirs(addon: Addon): seq[string] =
         return getSubdirs(parentDir(current))
     firstPass = false
 
-proc removeFiles(addon: Addon) =
-  for dir in addon.dirs:
-    removeDir(dir)
+proc getBackupFile(addon: Addon): string = 
+  var name = $addon.kind & addon.project
+  for c in invalidFilenameChars:
+    name = name.replace(c, '-')
+  for kind, path in walkDir(configData.backupDir):
+    if kind == pcFile:
+      let file = path.lastPathPart()
+      if file.contains(name):
+        return path
 
-proc setIdAndCleanupInstalled(addon: Addon) =
+proc removeFiles(addon: Addon) =
+    addon.dirs.apply(dir => removeDir(dir))
+    removeFile(getBackupFile(addon))
+
+proc setIdAndCleanup(addon: Addon) =
   for a in configData.addons:
     if a == addon:
       addon.id = a.id
@@ -231,57 +266,94 @@ proc setIdAndCleanupInstalled(addon: Addon) =
       break
 
 proc moveDirs(addon: Addon) =
+  if addon.state == Failed: return
   let source = addon.getAddonDirs()
-  addon.setIdAndCleanupInstalled()
+  addon.setIdAndCleanup()
+  addon.dirs = @[]
   for dir in source:
     let name = lastPathPart(dir)
     addon.dirs.add(name)
     let destination = joinPath(configData.installDir, name)
-    moveDir(dir, destination)
+    try:
+      moveDir(dir, destination)
+    except CatchableError as e:
+      addon.setAddonState(Failed, e.msg)
 
-proc backup(addon: Addon) =
-  let 
-    z = ZipArchive
-    backupName = addon.
-
-  if not z.open(backupName, fmWrite):
-    addon.setAddonState(Failed)
-    return
-  let source = configData.installDir
+proc createBackup(addon: Addon) =
+  if addon.state == Failed: return
+  var name = $addon.kind & addon.project & "&V=" & addon.version & ".zip"
+  for c in invalidFilenameChars:
+    name = name.replace(c, '-')
+  createDir(configData.backupDir)
+  try:
+    moveFile(addon.filename, joinPath(configData.backupDir, name))
+  except CatchableError as e:
+    addon.setAddonState(Failed, e.msg)  
 
 proc unzip(addon: Addon) =
+  if addon.state == Failed: return
   var z: ZipArchive
   if not z.open(addon.filename):
-    addon.setAddonState(Failed)
+    addon.setAddonState(Failed, &"Failed to open archive: {addon.filename}")
     return
-  let (dir, name, _) = splitFile(addon.filename)
-  addon.extractDir = joinPath(dir, name)
-  z.extractAll(addon.extractDir)
+  let (_, name, _) = splitFile(addon.filename)
+  addon.extractDir = joinPath(configData.tempDir, name)
+  try:
+    z.extractAll(addon.extractDir)
+    z.close()
+  except CatchableError as e:
+    addon.setAddonState(Failed, e.msg)
 
 proc getLatestJson(addon: Addon): Future[JsonNode] {.async.} =
   if addon.kind == TukuiAddon:
     if configData.tukuiCache.isNil:
-      let response = await addon.getLatest()
-      let body = await response.body
+      let futureResponse = addon.getLatest()
+      yield futureResponse
+      if futureResponse.failed:
+        addon.setAddonState(Failed, &"No response: {addon.getLatestUrl()}")
+        return
+      let response = futureResponse.read()
+      if response.status != "200":
+        addon.setAddonState(Failed, &"Response {response.status}: {addon.getLatestUrl()}")
+        return
+      let futureBody = response.body
+      yield futureBody
+      if futureBody.failed:
+        addon.setAddonState(Failed, &"Failed to download json: {addon.getLatestUrl()}")
+        return
+      let body = futureBody.read()
       configData.tukuiCache = parseJson(body)
     for node in configData.tukuiCache:
       if node["id"].getStr() == addon.project:
         return node
-    addon.setAddonState(Failed)
-    return new(JsonNode)
+    addon.setAddonState(Failed, "Addon not found")
+    return
   else:
-    let response = await addon.getLatest()
-    let body = await response.body
+    let futureResponse = addon.getLatest()
+    yield futureResponse
+    if futureResponse.failed:
+      addon.setAddonState(Failed, &"No response: {addon.getLatestUrl()}")
+      return
+    let response = futureResponse.read()
+    if response.status != "200":
+      addon.setAddonState(Failed, &"Response {response.status}: {addon.getLatestUrl()}")
+      return
+    let futureBody = response.body
+    yield futureBody
+    if futureBody.failed:
+      addon.setAddonState(Failed, &"Failed to download json: {addon.getLatestUrl()}")
+      return
+    let body = futureBody.read()
     return parseJson(body)
 
 proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
-  if addon.pinned:
-    addon.setAddonState(Pinned)
-    return none(Addon)
   addon.setAddonState(Checking)
   let json = await addon.getLatestJson()
   addon.setAddonState(Parsing)
   addon.setVersion(json)
+  if addon.pinned:
+    addon.setAddonState(FinishedPinned)
+    return none(Addon)
   if addon.version != addon.oldVersion:
     addon.time = now()
     addon.setDownloadUrl(json)
@@ -290,9 +362,12 @@ proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
     await addon.download()
     addon.setAddonState(Installing)
     addon.unzip()
-    addon.backup()
+    addon.createBackup()
     addon.moveDirs()
-    addon.setAddonState(Finished)
+    if addon.oldVersion.isEmptyOrWhitespace:
+      addon.setAddonState(FinishedInstalled)
+    else:
+      addon.setAddonState(FinishedUpdated)
     if addon.state == Failed:
       return none(Addon)
     return some(addon)
@@ -305,12 +380,14 @@ proc uninstall*(addon: Addon): Addon =
   addon.setAddonState(Removed)
   return addon
 
-proc pinToggle*(addon: Addon): Addon =
-  addon.pinned = not addon.pinned
-  if addon.pinned:
-    addon.setAddonState(Pinned)
-  else:
-    addon.setAddonState(Unpinned)
+proc pin*(addon: Addon): Addon =
+  addon.pinned = true
+  addon.setAddonState(Pinned)
+  return addon
+
+proc unpin*(addon: Addon): Addon =
+  addon.pinned = false
+  addon.setAddonState(Unpinned)
   return addon
 
 proc list*(addon: Addon) =
@@ -328,10 +405,29 @@ proc list*(addon: Addon) =
   t.write(1, addon.line, true, colors, style,
     fgBlue, &"{addon.id:<3}",
     fgDefault, &"{addon.name:<32}",
+    fgRed, pin,
     fgGreen, &"{addon.prettyVersion():<15}",
     fgCyan, &"{kind:<6}",
     fgBlue, &"{branch:<10}")
-  t.write(36, addon.line, false, colors, style, fgRed, pin, resetStyle)
+
+proc restore*(addon: Addon): Option[Addon] =
+  addon.setAddonState(Restoring)
+  let filename = getBackupFile(addon)
+  if filename.isEmptyOrWhitespace:
+    addon.setAddonState(Failed, "Backup not found")
+    return none(Addon)
+  let start = filename.find("&V=") + 3
+  addon.filename = filename
+  addon.oldVersion = addon.version
+  addon.version = filename[start .. ^5] #exclude .zip
+  addon.time = getFileInfo(filename).lastWriteTime.local()
+  addon.unzip()
+  addon.moveDirs()
+  addon.setAddonState(Restored)
+  if addon.state == Failed:
+    return none(Addon)
+  return some(addon)
+  
 
 proc toJsonHook*(a: Addon): JsonNode =
   result = newJObject()

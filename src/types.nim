@@ -4,32 +4,41 @@ import std/times
 
 type
   Action* = enum
-    Install, Update, Remove, List, Pin, Unpin, Restore, Nothing
+    Install, Update, Remove, List, Pin, Unpin, Restore, Empty
 
   AddonState* = enum
     Checking = "Checking",
     Parsing = "Parsing",
     Downloading = "Downloading",
     Installing = "Installing",
-    Finished = "Finished",
+    FinishedInstalled = "Installed",
+    FinishedUpdated = "Updated",
+    FinishedPinned = "Pinned",
     FinishedAlreadyCurrent = "Finished",
     Failed = "Failed",
-    # BackingUp = "Backing up",
+    Restoring = "Restoring",
+    Restored = "Restored",
     Pinned = "Pinned",
     Unpinned = "Unpinned",
     Removed = "Removed",
   
   AddonKind* = enum
     Github, GithubRepo, Gitlab, TukuiMain, TukuiAddon, Wowint,
-  
+
+  Error* = object
+    addon*: Addon
+    msg*: string
+
   Config* = object
     mode*: string
     tempDir*: string
     installDir*: string
+    backupDir*: string
     addonJsonFile*: string
     tukuiCache*: JsonNode
     addons*: seq[Addon]
     term*: Term
+    log*: seq[Error]
 
   Addon* = ref object
     state*: AddonState

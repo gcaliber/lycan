@@ -1,5 +1,3 @@
-import print
-
 import std/options
 import std/os
 import std/json
@@ -14,6 +12,8 @@ const LYCAN_CFG: string = "/home/mike/projects/lycan/test/lycan.cfg"
 let configJson = parseJson(readFile(LYCAN_CFG))
 let mode = configJson["mode"].getStr()
 let file = configJson[mode]["installedAddons"].getStr()
+let install = configJson[mode]["addonDir"].getStr()
+let backup = joinPath(install.parentDir(), "lycan_backup")
 
 proc fromJsonHook(a: var Addon, j: JsonNode) =
   var
@@ -52,7 +52,8 @@ proc parseInstalledAddons(filename: string): seq[Addon] =
 var configData* = Config(
   mode: mode,
   tempDir: getTempDir(),
-  installDir: configJson[mode]["addonDir"].getStr(),
+  installDir: install,
+  backupDir: backup,
   addonJsonFile: file,
   addons: parseInstalledAddons(file),
   term: termInit()

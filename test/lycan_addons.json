@@ -7,7 +7,7 @@
     "id":1,
     "pinned":false,
     "dirs":["AdvancedInterfaceOptions"],
-    "time":"2022-10-05T22:29"
+    "time":"2022-10-08T13:04"
   },
   {
     "project":"siebens/legacy/autoactioncam",
@@ -17,17 +17,17 @@
     "id":3,
     "pinned":false,
     "dirs":["AutoActionCam"],
-    "time":"2022-10-03T22:29"
+    "time":"2022-10-08T13:05"
   },
   {
     "project":"209",
     "name":"Eltruism",
     "kind":"TukuiAddon",
-    "version":"3.4.7",
+    "version":"3.4.8",
     "id":6,
     "pinned":false,
     "dirs":["ElvUI_EltreumUI"],
-    "time":"2022-10-05T22:29"
+    "time":"2022-10-08T13:05"
   },
   {
     "project":"elvui",
@@ -37,7 +37,7 @@
     "id":5,
     "pinned":false,
     "dirs":["ElvUI_OptionsUI", "ElvUI"],
-    "time":"2022-10-05T22:30"
+    "time":"2022-10-08T13:05"
   },
   {
     "project":"24608",
@@ -47,17 +47,17 @@
     "id":4,
     "pinned":false,
     "dirs":["Hekili"],
-    "time":"2022-10-05T22:29"
+    "time":"2022-10-08T13:04"
   },
   {
     "project":"Tercioo/Plater-Nameplates",
     "branch":"master",
     "name":"Plater-Nameplates",
     "kind":"GithubRepo",
-    "version":"085b58e2e223d0df5838f1be9d2439a011b58abe",
+    "version":"117e7768235f5e07d271a897efca85d7e6411c8a",
     "id":2,
     "pinned":false,
     "dirs":["Plater"],
-    "time":"2022-10-04T22:29"
+    "time":"2022-10-08T13:04"
   }
 ]

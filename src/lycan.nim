@@ -1,5 +1,3 @@
-import print
-
 import std/algorithm
 import std/asyncdispatch
 import std/json
@@ -112,10 +110,9 @@ proc installAll(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
   for addon in addons:
     futures.add(addon.install())
   let opt = await all(futures)
-  let addons = collect(newSeq):
+  result = collect(newSeq):
     for a in opt:
       if a.isSome: a.get()
-  return addons
 
 proc removeAll(addons: seq[Addon]): seq[Addon] =
   var removed: seq[Addon]
@@ -123,14 +120,28 @@ proc removeAll(addons: seq[Addon]): seq[Addon] =
     removed.add(addon.uninstall())
   return removed
 
-proc pinToggleAll(addons: seq[Addon]): seq[Addon] =
+proc restoreAll(addons: seq[Addon]): seq[Addon] =
+  var opt: seq[Option[Addon]]
+  for addon in addons:
+    opt.add(addon.restore())
+  result = collect(newSeq):
+    for a in opt:
+      if a.isSome: a.get()
+
+proc pinAll(addons: seq[Addon]): seq[Addon] =
   var pinned: seq[Addon]
   for addon in addons:
-    pinned.add(addon.pinToggle())
+    pinned.add(addon.pin())
+  return pinned
+
+proc unpinAll(addons: seq[Addon]): seq[Addon] =
+  var pinned: seq[Addon]
+  for addon in addons:
+    pinned.add(addon.unpin())
   return pinned
 
 var 
-  action = Nothing
+  action = Empty
   actionCount = 0
   args: seq[string]
 for kind, key, val in opt.getopt():
@@ -174,12 +185,12 @@ of Install:
       a.line = line
       addons.add(a)
       line += 1
-of Update, Nothing:
+of Update, Empty:
   for addon in configData.addons:
     addon.line = line
     addons.add(addon)
     line += 1
-of Remove, Pin, Unpin:
+of Remove, Restore, Pin, Unpin:
   for arg in args:
     try:
       ids.add(int16(arg.parseInt()))
@@ -199,30 +210,26 @@ of List:
   for addon in addons:
     addon.line = line
     line += 1
-of Restore: echo "TODO restore"
 
-var final: seq[Addon]
-
+var processed, rest, final: seq[Addon]
 case action
-of Install, Update:
-  let updates = waitFor addons.installAll()
-  let noupdates = configData.addons.filter(addon => addon notin updates)
-  final = concat(updates, noupdates)
-  assignIds(final)
+of Install, Update, Empty:
+  processed = waitFor addons.installAll()
+  assignIds(processed)
 of Remove:
-  let removed = addons.removeAll()
-  final = configData.addons.filter(addon => addon notin removed)
-of Pin, Unpin:
-  let toggled = addons.pinToggleAll()
-  let rest = configData.addons.filter(addon => addon notin toggled)
-  final = concat(toggled, rest)
+  processed = addons.removeAll()
+of Pin:
+  processed = addons.pinAll()
+of Unpin:
+  processed = addons.unpinAll()
+of Restore:
+  processed = addons.restoreAll()
 of List: 
   addons.apply(list)
   quit()
-of Restore: echo "TODO restore"
-else:
-  discard
 
+rest = configData.addons.filter(addon => addon notin processed)
+final = if action != Remove: concat(processed, rest) else: rest
 writeAddons(final)
 
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
