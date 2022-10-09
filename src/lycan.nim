@@ -19,14 +19,13 @@ import types
 
 proc assignIds(addons: seq[Addon]) =
   var ids: set[int16]
-  for addon in addons:
-    incl(ids, addon.id)
+  addons.apply((a: Addon) => ids.incl(a.id))
 
   var id: int16 = 1
-  for addon in addons:
-    if addon.id == 0:
+  for a in addons:
+    if a.id == 0:
       while id in ids: id += 1
-      addon.id = id
+      a.id = id
       incl(ids, id)
 
 proc toJsonHook(a: Addon): JsonNode =
@@ -97,8 +96,7 @@ proc addonFromUrl(url: string): Option[Addon] =
 
 proc addonFromId(id: int16): Option[Addon] =
   for a in configData.addons:
-    if a.id == id:
-      return some(a)
+    if a.id == id: return some(a)
   return none(Addon)
 
 proc displayHelp() =
@@ -112,48 +110,21 @@ proc displayHelp() =
   echo "      --restore <addon id#>    Restore addon to last backed up version and pin it"
   quit()
 
+proc installAll(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
+  let futures = addons.map(install)
+  let opt = await all(futures)
+  return collect(for a in opt: (if a.isSome: a.get()))
+
+proc restoreAll(addons: seq[Addon]): seq[Addon] =
+  let opt = addons.map(restore)
+  return collect(for a in opt: (if a.isSome: a.get()))
+
 var opt = initOptParser(
   commandLineParams(), 
   shortNoVal = {'h', 'u', 'i', 'a'}, 
   longNoVal = @["help", "update"]
 )
-
-proc installAll(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
-  var futures: seq[Future[Option[Addon]]]
-  for addon in addons:
-    futures.add(addon.install())
-  let opt = await all(futures)
-  result = collect(newSeq):
-    for a in opt:
-      if a.isSome: a.get()
-
-proc removeAll(addons: seq[Addon]): seq[Addon] =
-  var removed: seq[Addon]
-  for addon in addons:
-    removed.add(addon.uninstall())
-  return removed
-
-proc restoreAll(addons: seq[Addon]): seq[Addon] =
-  var opt: seq[Option[Addon]]
-  for addon in addons:
-    opt.add(addon.restore())
-  result = collect(newSeq):
-    for a in opt:
-      if a.isSome: a.get()
-
-proc pinAll(addons: seq[Addon]): seq[Addon] =
-  var pinned: seq[Addon]
-  for addon in addons:
-    pinned.add(addon.pin())
-  return pinned
-
-proc unpinAll(addons: seq[Addon]): seq[Addon] =
-  var pinned: seq[Addon]
-  for addon in addons:
-    pinned.add(addon.unpin())
-  return pinned
-
-var 
+var
   action = Empty
   actionCount = 0
   args: seq[string]
@@ -163,18 +134,19 @@ for kind, key, val in opt.getopt():
     if val == "":
       case key:
         of "a", "i":          action = Install; actionCount += 1
-        of "u":               action = Update; actionCount += 1
-        of "r":               action = Remove; actionCount += 1
-        of "l", "list":       action = List; actionCount += 1
+        of "u":               action = Update;  actionCount += 1
+        of "r":               action = Remove;  actionCount += 1
+        of "l", "list":       action = List;    actionCount += 1
         else: displayHelp()
     else:
       args.add(val)
       case key:
         of "add", "install":  action = Install; actionCount += 1
-        of "update":          action = Update; actionCount += 1
-        of "remove":          action = Remove; actionCount += 1
-        of "pin":             action = Pin; actionCount += 1
-        of "unpin":           action = Unpin; actionCount += 1
+        of "update":          action = Update;  actionCount += 1
+        of "remove":          action = Remove;  actionCount += 1
+        of "l", "list":       action = List;    actionCount += 1
+        of "pin":             action = Pin;     actionCount += 1
+        of "unpin":           action = Unpin;   actionCount += 1
         of "restore":         action = Restore; actionCount += 1
         else: displayHelp()
   of cmdArgument:
@@ -182,7 +154,6 @@ for kind, key, val in opt.getopt():
   else:
     displayHelp()
   if actionCount > 1:
-    echo "One thing at a time, bruh"
     displayHelp()
 
 var 
@@ -230,11 +201,11 @@ of Install, Update, Empty:
   processed = waitFor addons.installAll()
   assignIds(processed)
 of Remove:
-  processed = addons.removeAll()
+  processed = addons.map(uninstall)
 of Pin:
-  processed = addons.pinAll()
+  processed = addons.map(pin)
 of Unpin:
-  processed = addons.unpinAll()
+  processed = addons.map(unpin)
 of Restore:
   processed = addons.restoreAll()
 of List: 

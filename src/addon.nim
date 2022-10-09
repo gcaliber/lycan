@@ -139,7 +139,8 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) =
         if asset["content_type"].getStr() == "application/json":
           continue
         let lc = asset["name"].getStr().toLower()
-        if not (lc.contains("bcc") or lc.contains("tbc") or lc.contains("wotlk") or lc.contains("wrath") or lc.contains("classic")):
+        let ignore = @["bcc", "tbc", "wotlk", "wrath", "classic"].filter(s => lc.contains(s))
+        if len(ignore) == 0:
           addon.downloadUrl = asset["browser_download_url"].getStr()
     else:
       addon.downloadUrl = json["zipball_url"].getStr()
@@ -225,11 +226,7 @@ proc processTocs(path: string): bool =
   return false
 
 proc getSubdirs(path: string): seq[string] =
-  var subdirs: seq[string]
-  for kind, dir in walkDir(path):
-    if kind == pcDir:
-      subdirs.add(dir)
-  return subdirs
+  return collect(for kind, dir in walkDir(path): (if kind == pcDir: dir))
 
 proc getAddonDirs(addon: Addon): seq[string] =
   var current = addon.extractDir
@@ -388,14 +385,16 @@ proc list*(addon: Addon) =
       of GithubRepo: "Github"
       else: $addon.kind
     pin = if addon.pinned: "!" else: ""
-    branch = if addon.kind == GithubRepo: "@" & addon.branch.get() else: ""
+    branch = if addon.branch.isSome: addon.branch.get() else: ""
   t.write(1, addon.line, true, colors, style,
     fgBlue, &"{addon.id:<3}",
     fgDefault, &"{addon.name:<32}",
     fgRed, pin,
-    fgGreen, &"{addon.prettyVersion():<15}",
+    fgGreen, &"{addon.prettyVersion():<18}",
     fgCyan, &"{kind:<6}",
-    fgBlue, &"{branch:<10}")
+    fgDefault, if addon.branch.isSome: "@" else: "",
+    fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}",
+    resetStyle)
 
 proc restore*(addon: Addon): Option[Addon] =
   addon.setAddonState(Restoring)
