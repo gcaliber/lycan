@@ -134,17 +134,3 @@ macro write*(t: Term, args: varargs[typed]): untyped =
   else:
     for item in args.items:
       result.add(newCall(bindSym"writeProcessArg", t, item))
-
-
-when isMainModule:
-    import std/strformat
-    let t = termInit()
-    
-    # for line in 0 .. 9:
-    #   t.write(0, line, true, fgWhite, &"{line}                                          ", resetStyle)
-
-    t.write(5, 0, false, fgWhite, "0")
-    t.write(5, 1, false, fgWhite, "1")
-    t.write(5, 2, true, fgWhite, "2")
-    t.write(5, 3, true, fgWhite, "3")
-    t.write(5, 4, false, fgWhite, "4")

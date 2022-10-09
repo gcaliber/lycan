@@ -18,7 +18,6 @@ import config
 import types
 import term
 
-
 proc `==`*(a, b: Addon): bool {.inline.} =
   a.project == b.project
 
@@ -43,11 +42,14 @@ proc prettyOldVersion(addon: Addon): string =
 const DARK_GREY: Color = Color(0x20_20_20)
 const LIGHT_GREY: Color = Color(0x34_34_34)
 
+proc getName*(addon: Addon): string =
+  result = if not addon.name.isEmptyOrWhitespace: addon.name 
+  else: $addon.kind & ':' & addon.project
+
 proc stateMessage(addon: Addon) = 
   let 
     t = configData.term
     indent = 2
-    name = if not addon.name.isEmptyOrWhitespace: addon.name else: $addon.kind & ':' & addon.project
     even = addon.line mod 2 == 0
     arrow = if addon.old_version.isEmptyOrWhitespace: "" else: "->"
     colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
@@ -55,47 +57,48 @@ proc stateMessage(addon: Addon) =
   case addon.state
   of Checking, Parsing:
     t.write(indent, addon.line, true, colors, style,
-      fgCyan, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgCyan, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
       fgYellow, &"{addon.prettyOldVersion()}", resetStyle)
   of Downloading, Installing, Restoring:
     t.write(indent, addon.line, true, colors, style,
-      fgCyan, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgCyan, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of FinishedUpdated, FinishedInstalled:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgGreen, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of FinishedAlreadyCurrent:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgGreen, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
       fgYellow, &"{addon.prettyVersion()}", resetStyle)
   of FinishedPinned:
     t.write(indent, addon.line, true, colors, style,
-      fgYellow, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgYellow, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
       styleBright, fgRed, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", 
       if addon.version != addon.oldVersion: fgGreen else: fgYellow,
       &"{addon.prettyVersion()}", resetStyle)
   of Removed, Pinned:
     t.write(indent, addon.line, true, colors, style,
-      fgYellow, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgYellow, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Unpinned:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgGreen, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Restored:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgGreen, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Failed:
     t.write(indent, addon.line, true, colors, style,
-      fgRed, &"{$addon.state:<12}", fgDefault, &"{name:<32}",
+      fgRed, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
 
-proc setAddonState(addon: Addon, state: AddonState, errorMessage: string = "", sendMessage: bool = true) =
+proc setAddonState(addon: Addon, state: AddonState, err: string = "", sendMessage: bool = true) =
   if addon.state != Failed:
     addon.state = state
-    configData.log.add(Error(addon: addon, msg: errorMessage))
+  if err != "":
+    configData.log.add(Error(addon: addon, msg: err))
   if sendMessage:
     addon.stateMessage()
 
@@ -183,8 +186,8 @@ proc download(addon: Addon) {.async.} =
     addon.setAddonState(Failed, &"No response: {addon.downloadUrl}")
     return
   let response = futureResponse.read()
-  if response.status != "200":
-    addon.setAddonState(Failed, &"Response {response.status}: {addon.downloadUrl}")
+  if not response.status.contains("200"):
+    addon.setAddonState(Failed, err = &"Response {response.status}: {addon.getLatestUrl()}")
     return
   var downloadName: string
   try:
@@ -238,10 +241,8 @@ proc getAddonDirs(addon: Addon): seq[string] =
       assert len(subdirs) != 0 
       current = subdirs[0]
     else:
-      if firstPass:
-        return @[current]
-      else:
-        return getSubdirs(parentDir(current))
+      if firstPass: return @[current]
+      else: return getSubdirs(parentDir(current))
     firstPass = false
 
 proc getBackupFile(addon: Addon): string = 
@@ -255,8 +256,8 @@ proc getBackupFile(addon: Addon): string =
         return path
 
 proc removeFiles(addon: Addon) =
-    addon.dirs.apply(dir => removeDir(dir))
-    removeFile(getBackupFile(addon))
+  addon.dirs.apply(d => removeDir(d))
+  removeFile(getBackupFile(addon))
 
 proc setIdAndCleanup(addon: Addon) =
   for a in configData.addons:
@@ -305,46 +306,32 @@ proc unzip(addon: Addon) =
     addon.setAddonState(Failed, e.msg)
 
 proc getLatestJson(addon: Addon): Future[JsonNode] {.async.} =
-  if addon.kind == TukuiAddon:
-    if configData.tukuiCache.isNil:
-      let futureResponse = addon.getLatest()
-      yield futureResponse
-      if futureResponse.failed:
-        addon.setAddonState(Failed, &"No response: {addon.getLatestUrl()}")
-        return
-      let response = futureResponse.read()
-      if response.status != "200":
-        addon.setAddonState(Failed, &"Response {response.status}: {addon.getLatestUrl()}")
-        return
-      let futureBody = response.body
-      yield futureBody
-      if futureBody.failed:
-        addon.setAddonState(Failed, &"Failed to download json: {addon.getLatestUrl()}")
-        return
-      let body = futureBody.read()
-      configData.tukuiCache = parseJson(body)
-    for node in configData.tukuiCache:
-      if node["id"].getStr() == addon.project:
-        return node
-    addon.setAddonState(Failed, "Addon not found")
-    return
-  else:
+  var json: JsonNode
+  if addon.kind != TukuiAddon or (addon.kind == TukuiAddon and configData.tukuiCache.isNil):
     let futureResponse = addon.getLatest()
     yield futureResponse
     if futureResponse.failed:
       addon.setAddonState(Failed, &"No response: {addon.getLatestUrl()}")
       return
     let response = futureResponse.read()
-    if response.status != "200":
-      addon.setAddonState(Failed, &"Response {response.status}: {addon.getLatestUrl()}")
+    if not response.status.contains("200"):
+      addon.setAddonState(Failed, err = &"Response {response.status}: {addon.getLatestUrl()}")
       return
     let futureBody = response.body
     yield futureBody
     if futureBody.failed:
       addon.setAddonState(Failed, &"Failed to download json: {addon.getLatestUrl()}")
       return
-    let body = futureBody.read()
-    return parseJson(body)
+    json = parseJson(futureBody.read())
+  if addon.kind == TukuiAddon:
+    if configData.tukuiCache.isNil:
+      configData.tukuiCache = json
+    for node in configData.tukuiCache:
+      if node["id"].getStr() == addon.project:
+        return node
+    addon.setAddonState(Failed, "Addon not found in json")
+    return
+  return json
 
 proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
   addon.setAddonState(Checking)
@@ -427,17 +414,3 @@ proc restore*(addon: Addon): Option[Addon] =
   if addon.state == Failed:
     return none(Addon)
   return some(addon)
-  
-
-proc toJsonHook*(a: Addon): JsonNode =
-  result = newJObject()
-  result["project"] = %a.project
-  if a.branch.isSome():
-    result["branch"] = %a.branch.get()
-  result["name"] = %a.name
-  result["kind"] = %a.kind
-  result["version"] = %a.version
-  result["id"] = %a.id
-  result["pinned"] = %a.pinned
-  result["dirs"] = %a.dirs
-  result["time"] = %a.time.format("yyyy-MM-dd'T'HH:mm")

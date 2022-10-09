@@ -1,19 +1,20 @@
 import std/algorithm
 import std/asyncdispatch
-import std/json
-import std/jsonutils
+import std/[json, jsonutils]
 import std/options
-import std/os
-import std/parseopt
+import std/[os, parseopt]
 import std/re
 import std/sequtils
+import std/strformat
 import std/strutils
 import std/sugar
+import std/terminal
 import std/times
 
 import addon
 import config
 import prettyjson
+import term
 import types
 
 proc assignIds(addons: seq[Addon]) =
@@ -27,6 +28,18 @@ proc assignIds(addons: seq[Addon]) =
       while id in ids: id += 1
       addon.id = id
       incl(ids, id)
+
+proc toJsonHook(a: Addon): JsonNode =
+  result = newJObject()
+  result["project"] = %a.project
+  if a.branch.isSome(): result["branch"] = %a.branch.get()
+  result["name"] = %a.name
+  result["kind"] = %a.kind
+  result["version"] = %a.version
+  result["id"] = %a.id
+  result["pinned"] = %a.pinned
+  result["dirs"] = %a.dirs
+  result["time"] = %a.time.format("yyyy-MM-dd'T'HH:mm")
 
 proc writeAddons(addons: var seq[Addon]) =
   if len(addons) == 0: return
@@ -231,6 +244,13 @@ of List:
 rest = configData.addons.filter(addon => addon notin processed)
 final = if action != Remove: concat(processed, rest) else: rest
 writeAddons(final)
+
+let t = configData.term
+t.write(0, t.yMax, false, "\n")
+for item in configData.log:
+  t.write(0, t.yMax, false, fgRed, &"\nError: ", fgCyan, item.addon.getName, "\n", resetStyle)
+  t.write(4, t.yMax, false, fgDefault, item.msg, "\n", resetStyle)
+
 
 # default wow folder on windows C:\Program Files (x86)\World of Warcraft\
 # addons folder is <WoW>\_retail_\Interface\AddOns
