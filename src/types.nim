@@ -4,7 +4,7 @@ import std/times
 
 type
   Action* = enum
-    Install, Update, Remove, List, Pin, Unpin, Restore, Empty
+    Install, Update, Remove, List, Pin, Unpin, Restore, Setup, Empty
 
   AddonState* = enum
     Checking = "Checking",
@@ -33,12 +33,14 @@ type
     mode*: string
     tempDir*: string
     installDir*: string
+    backupEnabled*: bool
     backupDir*: string
     addonJsonFile*: string
     tukuiCache*: JsonNode
     addons*: seq[Addon]
     term*: Term
     log*: seq[Error]
+    local*: bool
 
   Addon* = ref object
     state*: AddonState

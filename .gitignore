@@ -3,5 +3,6 @@ nimblecache/
 htmldocs/
 src/lycan
 test/addons*
+test/_retail_*
 src/test*
 lycan_backup*

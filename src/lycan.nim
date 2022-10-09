@@ -1,3 +1,12 @@
+# https://github.com/Stanzilla/AdvancedInterfaceOptions
+# https://github.com/Tercioo/Plater-Nameplates/tree/master
+# https://gitlab.com/siebens/legacy/autoactioncam
+# https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
+# https://www.tukui.org/download.php?ui=elvui
+# https://www.tukui.org/addons.php?id=209
+
+# https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/siebens/legacy/autoactioncam https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html https://www.tukui.org/download.php?ui=elvui https://www.tukui.org/addons.php?id=209
+
 import std/algorithm
 import std/asyncdispatch
 import std/[json, jsonutils]
@@ -13,6 +22,7 @@ import std/times
 
 import addon
 import config
+import help
 import prettyjson
 import term
 import types
@@ -45,19 +55,11 @@ proc writeAddons(addons: var seq[Addon]) =
   addons.sort((a, z) => a.name.toLower() > z.name.toLower())
   let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
   let prettyJson = beautify($addonsJson)
+  echo(configData.addonJsonFile)
   let file = open(configData.addonJsonFile, fmWrite)
   write(file, prettyJson)
   close(file)
   
-# https://github.com/Stanzilla/AdvancedInterfaceOptions
-# https://github.com/Tercioo/Plater-Nameplates/tree/master
-# https://gitlab.com/siebens/legacy/autoactioncam
-# https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
-# https://www.tukui.org/download.php?ui=elvui
-# https://www.tukui.org/addons.php?id=209
-
-# https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/siebens/legacy/autoactioncam https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html https://www.tukui.org/download.php?ui=elvui https://www.tukui.org/addons.php?id=209
-
 proc addonFromUrl(url: string): Option[Addon] =
   var urlmatch: array[2, string]
   let pattern = re"^(?:https?://)?(?:www\.)?(.+)\.(?:com|org)/(.+[^/\n])"
@@ -99,17 +101,6 @@ proc addonFromId(id: int16): Option[Addon] =
     if a.id == id: return some(a)
   return none(Addon)
 
-proc displayHelp() =
-  echo "  -u, --update                 Update installed addons"
-  echo "  -i, --install <arg>          Install an addon where <arg> is the url"
-  echo "  -a, --add <arg>              Same as --install"
-  echo "  -r, --remove <addon id#>     Remove an installed addon where <arg> is the id# or project"
-  echo "  -l, --list                   List installed addons"
-  echo "      --pin <addon id#>        Pin an addon at the current version, do not update"
-  echo "      --unpin <addon id#>      Unpin an addon, resume updates"
-  echo "      --restore <addon id#>    Restore addon to last backed up version and pin it"
-  quit()
-
 proc installAll(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
   let futures = addons.map(install)
   let opt = await all(futures)
@@ -121,8 +112,8 @@ proc restoreAll(addons: seq[Addon]): seq[Addon] =
 
 var opt = initOptParser(
   commandLineParams(), 
-  shortNoVal = {'h', 'u', 'i', 'a'}, 
-  longNoVal = @["help", "update"]
+  shortNoVal = {'u', 'i', 'a'}, 
+  longNoVal = @["update"]
 )
 var
   action = Empty
@@ -133,27 +124,29 @@ for kind, key, val in opt.getopt():
   of cmdShortOption, cmdLongOption:
     if val == "":
       case key:
-        of "a", "i":          action = Install; actionCount += 1
-        of "u":               action = Update;  actionCount += 1
-        of "r":               action = Remove;  actionCount += 1
-        of "l", "list":       action = List;    actionCount += 1
-        else: displayHelp()
+      of "a", "i":          action = Install; actionCount += 1
+      of "u":               action = Update;  actionCount += 1
+      of "r":               action = Remove;  actionCount += 1
+      of "l", "list":       action = List;    actionCount += 1
+      else: displayHelp()
     else:
       args.add(val)
       case key:
-        of "add", "install":  action = Install; actionCount += 1
-        of "update":          action = Update;  actionCount += 1
-        of "remove":          action = Remove;  actionCount += 1
-        of "l", "list":       action = List;    actionCount += 1
-        of "pin":             action = Pin;     actionCount += 1
-        of "unpin":           action = Unpin;   actionCount += 1
-        of "restore":         action = Restore; actionCount += 1
-        else: displayHelp()
+      of "add", "install":  action = Install; actionCount += 1
+      of "update":          action = Update;  actionCount += 1
+      of "r", "remove":     action = Remove;  actionCount += 1
+      of "l", "list":       action = List;    actionCount += 1
+      of "pin":             action = Pin;     actionCount += 1
+      of "unpin":           action = Unpin;   actionCount += 1
+      of "restore":         action = Restore; actionCount += 1
+      of "c", "config":     action = Setup;   actionCount += 1
+      of "h", "help":       displayHelp(val)
+      else: displayHelp()
   of cmdArgument:
     args.add(key)
   else:
     displayHelp()
-  if actionCount > 1:
+  if actionCount > 1 or (len(args) > 0 and action == Empty):
     displayHelp()
 
 var 
@@ -194,6 +187,16 @@ of List:
   for addon in addons:
     addon.line = line
     line += 1
+of Setup:
+  for i in 0 ..< len(args):
+    let item = args[i]
+    case item:
+    of "path": echo "TODO"
+    of "backup": echo "TODO"
+    else:
+      echo &"Unrecognized option {item}"
+      quit()
+    writeConfig(configData)
 
 var processed, rest, final: seq[Addon]
 case action
@@ -211,6 +214,7 @@ of Restore:
 of List: 
   addons.apply(list)
   quit()
+of Setup: discard
 
 rest = configData.addons.filter(addon => addon notin processed)
 final = if action != Remove: concat(processed, rest) else: rest
@@ -221,7 +225,3 @@ t.write(0, t.yMax, false, "\n")
 for item in configData.log:
   t.write(0, t.yMax, false, fgRed, &"\nError: ", fgCyan, item.addon.getName, "\n", resetStyle)
   t.write(4, t.yMax, false, fgDefault, item.msg, "\n", resetStyle)
-
-
-# default wow folder on windows C:\Program Files (x86)\World of Warcraft\
-# addons folder is <WoW>\_retail_\Interface\AddOns
