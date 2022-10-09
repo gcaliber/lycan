@@ -110,6 +110,37 @@ proc restoreAll(addons: seq[Addon]): seq[Addon] =
   let opt = addons.map(restore)
   return collect(for a in opt: (if a.isSome: a.get()))
 
+proc setup(args: seq[string]) =
+  for i in 0 ..< len(args):
+    let item = args[i]
+    case item:
+    of "path":
+      try:
+        setPath(args[i + 1])
+        break
+      except:
+        echo "The path option must be followed by a path."
+        quit()
+    of "mode":
+      try:
+        setMode(args[i + 1])
+        break
+      except:
+        echo "The mode option must be followed by the desired mode."
+        quit()
+    of "backup":
+      try:
+        setBackup(args[i + 1])
+        break
+      except:
+        echo "The backup option must be followed by another arugment."
+        quit()
+    else:
+      echo &"Unrecognized option {item}"
+      quit()
+  writeConfig(configData)
+  quit()
+
 var opt = initOptParser(
   commandLineParams(), 
   shortNoVal = {'u', 'i', 'a'}, 
@@ -188,15 +219,7 @@ of List:
     addon.line = line
     line += 1
 of Setup:
-  for i in 0 ..< len(args):
-    let item = args[i]
-    case item:
-    of "path": echo "TODO"
-    of "backup": echo "TODO"
-    else:
-      echo &"Unrecognized option {item}"
-      quit()
-    writeConfig(configData)
+  setup(args)
 
 var processed, rest, final: seq[Addon]
 case action

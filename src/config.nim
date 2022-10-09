@@ -43,7 +43,7 @@ proc parseInstalledAddons(filename: string): seq[Addon] =
     a.fromJson(addon)
     result.add(a)
 
-proc getWowDir(): string =
+proc getWowDir(mode: string): string =
   when not defined(release):
     createDir("/home/mike/projects/lycan/test/_retail_/Interface/AddOns")
     createDir("/home/mike/projects/lycan/test/_retail_/WTF")
@@ -55,11 +55,11 @@ proc getWowDir(): string =
       return default
     root = "C:"
   for path in walkDirRec(root, yieldFilter = {pcDir}):
-    if path.contains(joinPath("World of Warcraft", "_retail_")):
+    if path.contains(joinPath("World of Warcraft", mode)):
       var wow = path
       while not wow.endsWith("World of Warcraft"):
         wow = parentDir(wow)
-      if dirExists(joinPath(wow, "_retail_", "Interface", "AddOns")):
+      if dirExists(joinPath(wow, mode, "Interface", "AddOns")):
         return wow
       else:
         echo &"Found WoW directory but no AddOns directory was found."
@@ -93,18 +93,16 @@ proc writeConfig*(config: Config) =
   write(file, prettyJson)
   close(file)
 
-proc loadConfig(): Config =
+proc loadConfig(default: string = ""): Config =
   var 
     configJson: JsonNode
     local = false
-    configExists = false
   if fileExists(localPath):
     try:
       let file = readFile(localPath)
+      local = true
       if len(file) != 0:
         configJson = parseJson(file)
-        configExists = true
-      local = true
     except CatchableError as e:
       echo &"Unable to parse {localPath}"
       echo &"When present this file overrides {configPath}\n"
@@ -113,47 +111,91 @@ proc loadConfig(): Config =
   elif fileExists(configPath):
     try: 
       configJson = parseJson(readFile(configPath))
-      configExists = true
     except CatchableError as e:
       echo &"Unable to parse {configPath}"
       echo "Delete this file to have lycan recreate the default config."
       echo e.msg
       quit()
 
-  if not configExists:
-    let mode = "_retail_"
-    let wow = getWowDir()
+  var 
+    mode: string
+    settings: JsonNode
+    modeExists = true
+  try:
+    mode = if default.isEmptyOrWhitespace: configJson["mode"].getStr() else: default
+    settings = configJson[mode]
+  except KeyError:
+    mode = if default.isEmptyOrWhitespace: "_retail_" else: default
+    modeExists = false
+    
+  if modeExists:
+    let addonJsonFile = settings["addonJsonFile"].getStr()
+    result = Config(
+      installDir: settings["installDir"].getStr(),
+      addonJsonFile: addonJsonFile,
+      backupEnabled: settings["backupEnabled"].getBool(),
+      backupDir: settings["backupDir"].getStr(),
+    )
+  else:
+    let wow = getWowDir(mode)
     let addonJsonFile = joinPath(wow, mode, "WTF", "lycan_addons.json")
-    let c = Config(
-      mode: "_retail_",
-      tempDir: getTempDir(),
+    result = Config(
       installDir: joinPath(wow, mode, "Interface", "AddOns"),
       addonJsonFile: addonJsonFile,
       backupEnabled: true,
       backupDir: joinPath(wow, mode, "Interface", "lycan_backup"),
-      addons: parseInstalledAddons(addonJsonFile),
-      term: termInit(),
-      local: local
     )
-    writeConfig(c)
-    return c
-  
-  let mode = configJson["mode"].getStr()
-  let addonJsonFile = configJson[mode]["addonJsonFile"].getStr()
-  return Config(
-    mode: mode,
-    tempDir: getTempDir(),
-    installDir: configJson[mode]["installDir"].getStr(),
-    addonJsonFile: addonJsonFile,
-    backupEnabled: configJson[mode]["backupEnabled"].getBool(),
-    backupDir: configJson[mode]["backupDir"].getStr(),
-    addons: parseInstalledAddons(addonJsonFile),
-    term: termInit(),
-    local: local
-  )
 
+    result.mode = mode
+    result.tempDir = getTempDir()
+    result.term = termInit()
+    result.local = local
+    result.addons = parseInstalledAddons(addonJsonFile)
+    
 var configData* = loadConfig()
 
 
+proc setPath*(path: string) =
+  if not dirExists(path):
+    echo &"Error: Path provided does not exist:\n  {path}"
+    quit()
+  let mode = configData.mode
+  configData.installDir = joinPath(path, mode, "Interface", "AddOns")
+  if not dirExists(configdata.installDir):
+    echo &"Error: Did not find {configdata.installDir}"
+    echo "Make sure you are in the correct mode (retail, wotlk, etc) and that World of Warcraft has been started at least once."
+    quit()
+  configData.addonJsonFile = joinPath(path, mode, "WTF", "lycan_addons.json")
+  configData.backupDir = joinPath(path, mode, "Interface", "lycan_backup")
 
+proc setMode*(mode: string) =
+  case mode.toLower()
+  of "retail", "r":
+    configData.mode = "_retail_"
+  of "wrath", "w":
+    configData.mode = "_classic_"
+  of "classic", "c":
+    configData.mode = "_classic_era_"
+  else:
+    echo "Valid modes are"
+    echo "  retail    Most recent expansion, Shadowlands"
+    echo "  wrath     Wrath of the Lich King Classic"
+    echo "  classic   Vanilla era Classic"
+    echo "These can be shortened to their first letter as well."
+  configData = loadConfig(configData.mode)
 
+proc setBackup*(arg: string) =
+  case arg.toLower()
+  of "y", "yes", "on", "enable", "true":
+    configData.backupEnabled = true
+  of "n", "no", "off", "disable", "false":
+    configData.backupEnabled = false
+  else:
+    if not dirExists(arg):
+      echo &"Error: Path provided does not exist:\n  {arg}"
+      quit()
+    for kind, path in walkDir(configData.backupDir):
+      if kind == pcFile:
+        moveFile(path, joinPath(arg, lastPathPart(path)))
+    configData.backupDir = arg
+    echo "Backup dir now ", arg
