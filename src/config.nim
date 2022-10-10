@@ -62,9 +62,9 @@ proc getWowDir(mode: string): string =
       if dirExists(joinPath(wow, mode, "Interface", "AddOns")):
         return wow
       else:
-        echo &"Found WoW directory but no AddOns directory was found."
-        echo "Make sure you have started WoW at least once to create this directory."
-        echo "If this is the incorrect location you can set it manually with"
+        echo &"Found WoW directory: {wow}"
+        echo "No AddOns directory was found. Make sure you have started WoW at least once to create this directory."
+        echo "If this location is incorrect you can set it manually with"
         echo "  lycan --config path <path/to/World of Warcraft>\n"
         quit()
   echo "Unable to determine the World of Warcraft install location."
@@ -172,6 +172,7 @@ proc setMode*(mode: string) =
   case mode.toLower()
   of "retail", "r":
     configData.mode = "_retail_"
+  # Need to verify if these are the correct directories
   of "wrath", "w":
     configData.mode = "_classic_"
   of "classic", "c":
@@ -193,9 +194,11 @@ proc setBackup*(arg: string) =
   else:
     if not dirExists(arg):
       echo &"Error: Path provided does not exist:\n  {arg}"
+      echo "Enable or disable backups with lycan --config backup on/off"
       quit()
     for kind, path in walkDir(configData.backupDir):
       if kind == pcFile:
         moveFile(path, joinPath(arg, lastPathPart(path)))
     configData.backupDir = arg
     echo "Backup dir now ", arg
+    echo "Existing backup files have been moved."
