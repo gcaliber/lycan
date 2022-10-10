@@ -43,7 +43,7 @@ proc parseInstalledAddons(filename: string): seq[Addon] =
     a.fromJson(addon)
     result.add(a)
 
-proc getWowDir(mode: string): string =
+proc getWowDir(mode: Mode): string =
   when not defined(release):
     createDir("/home/mike/projects/lycan/test/_retail_/Interface/AddOns")
     createDir("/home/mike/projects/lycan/test/_retail_/WTF")
@@ -55,11 +55,12 @@ proc getWowDir(mode: string): string =
       return default
     root = "C:"
   for path in walkDirRec(root, yieldFilter = {pcDir}):
-    if path.contains(joinPath("World of Warcraft", mode)):
+    let dir = '_' & $mode & '_'
+    if path.contains(joinPath("World of Warcraft", dir)):
       var wow = path
       while not wow.endsWith("World of Warcraft"):
         wow = parentDir(wow)
-      if dirExists(joinPath(wow, mode, "Interface", "AddOns")):
+      if dirExists(joinPath(wow, dir, "Interface", "AddOns")):
         return wow
       else:
         echo &"Found WoW directory: {wow}"
@@ -79,7 +80,7 @@ let
 
 proc writeConfig*(config: Config) =
   let j = newJObject()
-  let mode = config.mode
+  let mode = $config.mode
   j["mode"] = %config.mode
   j[mode] = newJObject()
   j[mode]["addonJsonFile"] = %config.addonJsonFile
@@ -93,7 +94,7 @@ proc writeConfig*(config: Config) =
   write(file, prettyJson)
   close(file)
 
-proc loadConfig(default: string = ""): Config =
+proc loadConfig(default: Mode = None): Config =
   var 
     configJson: JsonNode
     local = false
@@ -118,14 +119,14 @@ proc loadConfig(default: string = ""): Config =
       quit()
 
   var 
-    mode: string
+    mode: Mode
     settings: JsonNode
     modeExists = true
   try:
-    mode = if default.isEmptyOrWhitespace: configJson["mode"].getStr() else: default
-    settings = configJson[mode]
+    mode.fromJson(configJson["mode"])
+    settings = configJson[$mode]
   except KeyError:
-    mode = if default.isEmptyOrWhitespace: "_retail_" else: default
+    mode = if default == None: Retail else: default
     modeExists = false
     
   if modeExists:
@@ -138,12 +139,13 @@ proc loadConfig(default: string = ""): Config =
     )
   else:
     let wow = getWowDir(mode)
-    let addonJsonFile = joinPath(wow, mode, "WTF", "lycan_addons.json")
+    let dir = '_' & $mode & '_'
+    let addonJsonFile = joinPath(wow, dir, "WTF", "lycan_addons.json")
     result = Config(
-      installDir: joinPath(wow, mode, "Interface", "AddOns"),
+      installDir: joinPath(wow, dir, "Interface", "AddOns"),
       addonJsonFile: addonJsonFile,
       backupEnabled: true,
-      backupDir: joinPath(wow, mode, "Interface", "lycan_backup"),
+      backupDir: joinPath(wow, dir, "Interface", "lycan_backup"),
     )
 
     result.mode = mode
@@ -159,7 +161,7 @@ proc setPath*(path: string) =
   if not dirExists(path):
     echo &"Error: Path provided does not exist:\n  {path}"
     quit()
-  let mode = configData.mode
+  let mode = $configData.mode
   configData.installDir = joinPath(path, mode, "Interface", "AddOns")
   if not dirExists(configdata.installDir):
     echo &"Error: Did not find {configdata.installDir}"
@@ -171,12 +173,12 @@ proc setPath*(path: string) =
 proc setMode*(mode: string) =
   case mode.toLower()
   of "retail", "r":
-    configData.mode = "_retail_"
+    configData.mode = Retail
   # Need to verify if these are the correct directories
   of "wrath", "w":
-    configData.mode = "_classic_"
+    configData.mode = Classic
   of "classic", "c":
-    configData.mode = "_classic_era_"
+    configData.mode = ClassicEra
   else:
     echo "Valid modes are"
     echo "  retail    Most recent expansion, Shadowlands"

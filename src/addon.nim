@@ -129,17 +129,29 @@ proc setVersion(addon: Addon, json: JsonNode) =
   of Wowint:
     addon.version = json[0]["UIVersion"].getStr()
 
+proc getInvalidModeStrings(mode: Mode): seq[string] =
+  case configData.mode
+  of Retail:
+    result = @["bcc", "tbc", "wotlk", "wrath", "classic"]
+  of Classic:
+    result = @["mainline", "classic"]
+  of ClassicEra:
+    result = @["mainline", "bcc", "tbc", "wotlk", "wrath"]
+  of None:
+    discard
+
 proc setDownloadUrl(addon: Addon, json: JsonNode) =
   if addon.state == Failed: return
   case addon.kind
   of Github:
     let assets = json["assets"]
     if len(assets) != 0:
+      let invalid = getInvalidModeStrings(configData.mode)
       for asset in assets:
         if asset["content_type"].getStr() == "application/json":
           continue
         let lc = asset["name"].getStr().toLower()
-        let ignore = @["bcc", "tbc", "wotlk", "wrath", "classic"].filter(s => lc.contains(s))
+        let ignore = invalid.filter(s => lc.contains(s))
         if len(ignore) == 0:
           addon.downloadUrl = asset["browser_download_url"].getStr()
     else:
@@ -210,7 +222,6 @@ proc download(addon: Addon) {.async.} =
   io.write(file, futureBody.read())
   close(file)
 
-
 proc processTocs(path: string): bool =
   for kind, file in walkDir(path):
     if kind == pcFile:
@@ -225,21 +236,18 @@ proc processTocs(path: string): bool =
         return true
   return false
 
-proc getSubdirs(path: string): seq[string] =
-  return collect(for kind, dir in walkDir(path): (if kind == pcDir: dir))
-
 proc getAddonDirs(addon: Addon): seq[string] =
   var current = addon.extractDir
   var firstPass = true
   while true:
     let toc = processTocs(current)
     if not toc:
-      let subdirs = getSubdirs(current)
+      let subdirs = collect(for kind, dir in walkDir(current): (if kind == pcDir: dir))
       assert len(subdirs) != 0 
       current = subdirs[0]
     else:
       if firstPass: return @[current]
-      else: return getSubdirs(parentDir(current))
+      else: return collect(for kind, dir in walkDir(parentDir(current)): (if kind == pcDir: dir))
     firstPass = false
 
 proc getBackupFile(addon: Addon): string = 

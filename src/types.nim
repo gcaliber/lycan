@@ -6,6 +6,12 @@ type
   Action* = enum
     Install, Update, Remove, List, Pin, Unpin, Restore, Setup, Empty
 
+  Mode* = enum
+    Retail = "retail",
+    Classic = "classic",
+    ClassicEra = "clasic_era",
+    None = "",
+
   AddonState* = enum
     Checking = "Checking",
     Parsing = "Parsing",
@@ -30,7 +36,7 @@ type
     msg*: string
 
   Config* = object
-    mode*: string
+    mode*: Mode
     tempDir*: string
     installDir*: string
     backupEnabled*: bool
