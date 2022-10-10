@@ -25,13 +25,34 @@ proc displayHelp*(option: string = "") =
     t.write(x2, t.yMax, true, "lycan -i https://www.tukui.org/addons.php?id=209", "\n")
     quit()
 
+  of "c", "config":
+    let x = 2
+    let x2 = 4
+    t.write(x, t.yMax, true, "-c, --config [options]", "\n\n")
+    t.write(x, t.yMax, true, "Set lycan configuration options including mode, wow path, and backups.\n\n")
+    t.write(x, t.yMax, true, "OPTIONS:", "\n")
+    t.write(x2, t.yMax, true, "[m|mode] [retail|wrath|classic]  Set the mode to retail, wrath, or classic\n")
+    t.write(x2, t.yMax, true, "    Can also be abbreviated as the first letter\n\n")
+    t.write(x2, t.yMax, true, "path   Set the path of the World of Warcraft directory for the current mode.\n\n")
+    t.write(x2, t.yMax, true, "backup [path|on|off]   Path sets the backup directory. The default backs up to a folder alongside the WoW AddOns folder.\n")
+    t.write(x2, t.yMax, true, "    On or off enables or disables backups respectively.\n")
+    t.write(x, t.yMax, true, "EXAMPLES:", "\n")
+    t.write(x2, t.yMax, true, "lycan -c m w", "\n")
+    t.write(x2, t.yMax, true, "    Change the mode to Wrath of the Lich King Classic", "\n")
+    t.write(x2, t.yMax, true, "lycan path \"C:\\Program Files (x86)\\World of Warcraft\"", "\n")
+    t.write(x2, t.yMax, true, "lycan backup off", "\n")
+    t.write(x2, t.yMax, true, "    Disable backing up addons. Restore feature will be disabled for any addons installed or updated while off.", "\n")
+    t.write(x2, t.yMax, true, "lycan backup \"D:\\wow addon backup\"", "\n")
+    t.write(x2, t.yMax, true, "    Change the backup directory to \"D:\\wow addon backup\"  Existing backups will be moved to the new location.", "\n")
+    quit()
+
   of "l", "list":
     let x = 2
     let x2 = 4
     t.write(x, t.yMax, true, "-l, --list [options]", "\n\n")
     t.write(x, t.yMax, true, "Lists installed addons. The default order is alphabetical.\n\n")
     t.write(x, t.yMax, true, "OPTIONS:", "\n")
-    t.write(x2, t.yMax, true, "t / time   Sort by most recent install install/update date and time.\n\n")
+    t.write(x2, t.yMax, true, "[t|time]   Sort by most recent install install/update date and time.\n\n")
     t.write(x, t.yMax, true, "EXAMPLES:", "\n")
     t.write(x2, t.yMax, true, "lycan -l time", "\n")
     t.write(x2, t.yMax, true, "lycan -lt", "\n")
@@ -42,6 +63,8 @@ proc displayHelp*(option: string = "") =
     let x2 = 30
     t.write(x, t.yMax, true, "-a, --add <args>")
     t.write(x2, t.yMax, false, "Install an addon. <args> is a list of urls seperated by spaces.", "\n")
+    t.write(x, t.yMax, true, "-c, --config [options]")
+    t.write(x2, t.yMax, false, "Configuration options. lycan --help config for more info", "\n")
     t.write(x, t.yMax, true, "-h, --help")
     t.write(x2, t.yMax, false, "Display this message.", "\n")
     t.write(x, t.yMax, true, "-i, --install <args>")

@@ -119,7 +119,7 @@ proc setup(args: seq[string]) =
         setPath(args[i + 1]); break
       except:
         echo "The path option must be followed by a path."
-    of "mode":
+    of "m", "mode":
       try:
         setMode(args[i + 1]); break
       except:
