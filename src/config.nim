@@ -181,7 +181,7 @@ proc setMode*(mode: string) =
     configData.mode = ClassicEra
   else:
     echo "Valid modes are"
-    echo "  retail    Most recent expansion, Shadowlands"
+    echo "  retail    Most recent expansion"
     echo "  wrath     Wrath of the Lich King Classic"
     echo "  classic   Vanilla era Classic"
     echo "These can be shortened to their first letter as well."
