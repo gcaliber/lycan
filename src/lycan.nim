@@ -125,7 +125,8 @@ proc setup(args: seq[string]) =
     echo &"Backups enabled: {configData.backupEnabled}"
     if configData.backupEnabled:
       echo &"Backups directory: {configData.backupDir}"
-    
+    quit()
+
   for i in 0 ..< len(args):
     let item = args[i]
     case item:
@@ -173,6 +174,7 @@ for kind, key, val in opt.getopt():
       of "u":               action = Update;  actionCount += 1
       of "r":               action = Remove;  actionCount += 1
       of "l", "list":       action = List;    actionCount += 1
+      of "c", "config":     action = Setup;   actionCount += 1
       else: displayHelp()
     else:
       args.add(val)

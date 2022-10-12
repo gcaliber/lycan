@@ -124,9 +124,14 @@ proc loadConfig(default: Mode = None): Config =
     modeExists = true
   result = Config()
   if not configJson.isNil:
-    mode.fromJson(configJson["mode"])
-    result.githubToken = configJson["githubToken"].getStr()
-    settings = configJson[$mode] 
+    try:
+      if default == None:
+        mode.fromJson(configJson["mode"])
+      else:
+        mode = default
+      settings = configJson[$mode]
+    except KeyError:
+      modeExists = false
   else:
     mode = if default == None: Retail else: default
     modeExists = false
@@ -147,6 +152,10 @@ proc loadConfig(default: Mode = None): Config =
     result.backupEnabled = true
     result.backupDir = joinPath(wow, dir, "Interface", "lycan_backup")
 
+  try:
+    result.githubToken = configJson["githubToken"].getStr()
+  except:
+    discard
   result.mode = mode
   result.tempDir = getTempDir()
   result.term = termInit()
