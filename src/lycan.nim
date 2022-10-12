@@ -14,8 +14,7 @@ import std/options
 import std/[os, parseopt]
 import std/re
 import std/sequtils
-import std/strformat
-import std/strutils
+import std/[strformat, strutils]
 import std/sugar
 import std/terminal
 import std/times
@@ -23,7 +22,7 @@ import std/times
 import addon
 import config
 import help
-import prettyjson
+import jsonbeautify
 import term
 import types
 

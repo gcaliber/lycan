@@ -1,4 +1,5 @@
 import std/terminal
+
 import config
 import term
 

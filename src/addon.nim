@@ -7,8 +7,7 @@ import std/options
 import std/os
 import std/re
 import std/sequtils
-import std/strformat
-import std/strutils
+import std/[strformat, strutils]
 import std/sugar
 import std/terminal
 import std/times

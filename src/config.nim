@@ -1,14 +1,12 @@
+import std/[json, jsonutils]
 import std/options
 import std/os
-import std/json
-import std/jsonutils
-import std/strformat
-import std/strutils
+import std/[strformat, strutils]
 import std/times
 
 import types
 import term
-import prettyjson
+import jsonbeautify
 
 proc fromJsonHook(a: var Addon, j: JsonNode) =
   var
