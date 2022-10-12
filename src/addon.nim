@@ -1,5 +1,6 @@
-import std/colors
+import std/algorithm
 import std/asyncdispatch
+import std/colors
 import std/httpclient
 import std/json
 import std/options
@@ -89,7 +90,7 @@ proc stateMessage(addon: Addon) =
     t.write(indent, addon.line, true, colors, style,
       fgGreen, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
-  of Failed:
+  of Failed, NoBackup:
     t.write(indent, addon.line, true, colors, style,
       fgRed, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
       fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
@@ -250,26 +251,32 @@ proc getAddonDirs(addon: Addon): seq[string] =
       else: return collect(for kind, dir in walkDir(parentDir(current)): (if kind == pcDir: dir))
     firstPass = false
 
-# this doesn't work, need to get the correct backup and delete the older one when there is an update
-proc getBackupFile(addon: Addon): string = 
+proc getBackupFiles(addon: Addon): seq[string] = 
   var name = $addon.kind & addon.project
   for c in invalidFilenameChars:
     name = name.replace(c, '-')
-  for kind, path in walkDir(configData.backupDir):
-    if kind == pcFile:
-      let file = path.lastPathPart()
-      if file.contains(name):
-        return path
+  var backups = collect(
+    for kind, path in walkDir(configData.backupDir): 
+      if kind == pcFile and lastPathPart(path).contains(name):
+        path
+  )
+  # oldest to newest
+  backups.sort((a, b) => int(getCreationTime(a).toUnix() - getCreationTime(b).toUnix()))
+  return backups
 
-proc removeFiles(addon: Addon) =
+proc removeAddonFiles(addon: Addon, removeAllBackups: bool) =
   addon.dirs.apply(d => removeDir(d))
-  removeFile(getBackupFile(addon))
+  var backups = getBackupFiles(addon)
+  if removeAllBackups:
+    backups.apply(removeFile)
+  elif len(backups) == 3:
+    removeFile(backups[0])
 
 proc setIdAndCleanup(addon: Addon) =
   for a in configData.addons:
     if a == addon:
       addon.id = a.id
-      a.removeFiles()
+      a.removeAddonFiles(removeAllBackups = false)
       break
 
 proc moveDirs(addon: Addon) =
@@ -288,6 +295,7 @@ proc moveDirs(addon: Addon) =
 
 proc createBackup(addon: Addon) =
   if addon.state == Failed: return
+  let backups = getBackupFiles(addon)
   var name = $addon.kind & addon.project & "&V=" & addon.version & ".zip"
   for c in invalidFilenameChars:
     name = name.replace(c, '-')
@@ -296,6 +304,7 @@ proc createBackup(addon: Addon) =
     moveFile(addon.filename, joinPath(configData.backupDir, name))
   except CatchableError as e:
     addon.setAddonState(Failed, e.msg)  
+  backups.apply(removeFile)
 
 proc unzip(addon: Addon) =
   if addon.state == Failed: return
@@ -369,7 +378,7 @@ proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
     return none(Addon)
 
 proc uninstall*(addon: Addon): Addon =
-  addon.removeFiles()
+  addon.removeAddonFiles(removeAllBackups = true)
   addon.setAddonState(Removed)
   return addon
 
@@ -407,18 +416,20 @@ proc list*(addon: Addon) =
 
 proc restore*(addon: Addon): Option[Addon] =
   addon.setAddonState(Restoring)
-  let filename = getBackupFile(addon)
-  if filename.isEmptyOrWhitespace:
-    addon.setAddonState(Failed, "Backup not found")
+  var backups = getBackupFiles(addon)
+  if len(backups) < 2:
+    addon.setAddonState(NoBackup)
     return none(Addon)
+  let filename = backups[0]
   let start = filename.find("&V=") + 3
   addon.filename = filename
   addon.oldVersion = addon.version
   addon.version = filename[start .. ^5] #exclude .zip
-  addon.time = getFileInfo(filename).lastWriteTime.local()
+  addon.time = getFileInfo(filename).creationTime.local()
   addon.unzip()
   addon.moveDirs()
   addon.setAddonState(Restored)
   if addon.state == Failed:
     return none(Addon)
+  removeFile(backups[1])
   return some(addon)

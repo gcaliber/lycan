@@ -122,10 +122,10 @@ proc loadConfig(default: Mode = None): Config =
     mode: Mode
     settings: JsonNode
     modeExists = true
-  try:
+  if not configJson.isNil:
     mode.fromJson(configJson["mode"])
     settings = configJson[$mode]
-  except KeyError:
+  else:
     mode = if default == None: Retail else: default
     modeExists = false
     

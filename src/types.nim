@@ -27,6 +27,7 @@ type
     Pinned = "Pinned",
     Unpinned = "Unpinned",
     Removed = "Removed",
+    NoBackup = "Not Found"
   
   AddonKind* = enum
     Github, GithubRepo, Gitlab, TukuiMain, TukuiAddon, Wowint,
