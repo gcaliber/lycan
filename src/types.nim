@@ -48,6 +48,7 @@ type
     term*: Term
     log*: seq[Error]
     local*: bool
+    githubToken*: string
 
   Addon* = ref object
     state*: AddonState

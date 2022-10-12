@@ -187,12 +187,26 @@ proc getLatestUrl(addon: Addon): string =
 
 proc getLatest(addon: Addon): Future[AsyncResponse] {.async.} =
   let url = addon.getLatestUrl()
-  let client = newAsyncHttpClient()
+  var headers = newHttpHeaders()
+  case addon.kind
+  of Github, GithubRepo:
+    if configData.githubToken != "":
+      headers["Authorization"] = &"token {configData.githubToken}"
+  else:
+    discard
+  let client = newAsyncHttpClient(headers = headers)
   return await client.get(url)
 
 
 proc download(addon: Addon) {.async.} =
-  let client = newAsyncHttpClient()
+  var headers = newHttpHeaders()
+  case addon.kind
+  of Github, GithubRepo:
+    if configData.githubToken != "":
+      headers["Authorization"] = &"token {configData.githubToken}"
+  else:
+    discard
+  let client = newAsyncHttpClient(headers = headers)
   let futureResponse = client.get(addon.downloadUrl)
   yield futureResponse
   if futureResponse.failed:
@@ -268,8 +282,6 @@ proc removeAddonFiles(addon: Addon, removeAllBackups: bool) =
   var backups = getBackupFiles(addon)
   if removeAllBackups:
     backups.apply(removeFile)
-  elif len(backups) == 3:
-    removeFile(backups[0])
 
 proc setIdAndCleanup(addon: Addon) =
   for a in configData.addons:
@@ -280,7 +292,8 @@ proc setIdAndCleanup(addon: Addon) =
 
 proc moveDirs(addon: Addon) =
   if addon.state == Failed: return
-  let source = addon.getAddonDirs()
+  var source = addon.getAddonDirs()
+  source.sort()
   addon.setIdAndCleanup()
   addon.dirs = @[]
   for dir in source:
@@ -299,11 +312,12 @@ proc createBackup(addon: Addon) =
   for c in invalidFilenameChars:
     name = name.replace(c, '-')
   createDir(configData.backupDir)
+  if len(backups) > 1:
+    removeFile(backups[0])
   try:
     moveFile(addon.filename, joinPath(configData.backupDir, name))
   except CatchableError as e:
-    addon.setAddonState(Failed, e.msg)  
-  backups.apply(removeFile)
+    addon.setAddonState(Failed, e.msg)
 
 proc unzip(addon: Addon) =
   if addon.state == Failed: return

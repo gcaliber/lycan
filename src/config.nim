@@ -80,11 +80,13 @@ proc writeConfig*(config: Config) =
   let j = newJObject()
   let mode = $config.mode
   j["mode"] = %config.mode
+  j["githubToken"] = %config.githubToken
   j[mode] = newJObject()
   j[mode]["addonJsonFile"] = %config.addonJsonFile
   j[mode]["installDir"] = %config.installDir
   j[mode]["backupEnabled"] = %config.backupEnabled
   j[mode]["backupDir"] = %config.backupDir
+  
 
   let prettyJson = beautify($j)
   let path = if config.local: localPath else: configPath
@@ -120,37 +122,36 @@ proc loadConfig(default: Mode = None): Config =
     mode: Mode
     settings: JsonNode
     modeExists = true
+  result = Config()
   if not configJson.isNil:
     mode.fromJson(configJson["mode"])
-    settings = configJson[$mode]
+    result.githubToken = configJson["githubToken"].getStr()
+    settings = configJson[$mode] 
   else:
     mode = if default == None: Retail else: default
     modeExists = false
-    
+  
+  var addonJsonFile: string
   if modeExists:
-    let addonJsonFile = settings["addonJsonFile"].getStr()
-    result = Config(
-      installDir: settings["installDir"].getStr(),
-      addonJsonFile: addonJsonFile,
-      backupEnabled: settings["backupEnabled"].getBool(),
-      backupDir: settings["backupDir"].getStr(),
-    )
+    addonJsonFile = settings["addonJsonFile"].getStr()
+    result.installDir = settings["installDir"].getStr()
+    result.addonJsonFile = addonJsonFile
+    result.backupEnabled = settings["backupEnabled"].getBool()
+    result.backupDir = settings["backupDir"].getStr()
   else:
     let wow = getWowDir(mode)
     let dir = '_' & $mode & '_'
-    let addonJsonFile = joinPath(wow, dir, "WTF", "lycan_addons.json")
-    result = Config(
-      installDir: joinPath(wow, dir, "Interface", "AddOns"),
-      addonJsonFile: addonJsonFile,
-      backupEnabled: true,
-      backupDir: joinPath(wow, dir, "Interface", "lycan_backup"),
-    )
+    addonJsonFile = joinPath(wow, dir, "WTF", "lycan_addons.json")
+    result.installDir = joinPath(wow, dir, "Interface", "AddOns")
+    result.addonJsonFile = addonJsonFile
+    result.backupEnabled = true
+    result.backupDir = joinPath(wow, dir, "Interface", "lycan_backup")
 
-    result.mode = mode
-    result.tempDir = getTempDir()
-    result.term = termInit()
-    result.local = local
-    result.addons = parseInstalledAddons(addonJsonFile)
+  result.mode = mode
+  result.tempDir = getTempDir()
+  result.term = termInit()
+  result.local = local
+  result.addons = parseInstalledAddons(addonJsonFile)
     
 var configData* = loadConfig()
 
@@ -171,22 +172,10 @@ proc setPath*(path: string) =
 proc setMode*(mode: string) =
   case mode.toLower()
   of "retail", "r", :
-    if configData.mode == Retail:
-      echo "Mode already set to retail"
-    else:
-      echo "Mode set: retail"
     configData.mode = Retail
   of "wrath", "wrathc", "wotlk", "wotlkc", "classic", "w", "c":
-    if configData.mode == Classic:
-      echo "Mode already set to classic"
-    else:
-      echo "Mode set: classic"
     configData.mode = Classic
   of "vanilla", "v":
-    if configData.mode == Vanilla:
-      echo "Mode already set to vanilla"
-    else:
-      echo "Mode set: vanilla"
     configData.mode = Vanilla
   else:
     echo "Valid modes are"
@@ -199,10 +188,8 @@ proc setMode*(mode: string) =
 proc setBackup*(arg: string) =
   case arg.toLower()
   of "y", "yes", "on", "enable", "enabled", "true":
-    echo "Backups enabled"
     configData.backupEnabled = true
   of "n", "no", "off", "disable", "disabled", "false":
-    echo "Backups disabled"
     configData.backupEnabled = false
   else:
     if not dirExists(arg):
@@ -214,3 +201,6 @@ proc setBackup*(arg: string) =
     configData.backupDir = arg
     echo "Backup directory now ", arg
     echo "Existing backup files have been moved."
+
+proc setGithubToken*(arg: string) =
+  configData.githubToken = arg

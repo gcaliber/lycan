@@ -7,6 +7,9 @@
 
 # https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/siebens/legacy/autoactioncam https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html https://www.tukui.org/download.php?ui=elvui https://www.tukui.org/addons.php?id=209
 
+# https://github.com/p3lim-wow/QuickQuest https://www.tukui.org/download.php?ui=elvui https://github.com/AdiAddons/AdiBags
+
+
 import std/algorithm
 import std/asyncdispatch
 import std/[json, jsonutils]
@@ -54,7 +57,6 @@ proc writeAddons(addons: var seq[Addon]) =
   addons.sort((a, z) => a.name.toLower() > z.name.toLower())
   let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
   let prettyJson = beautify($addonsJson)
-  echo(configData.addonJsonFile)
   let file = open(configData.addonJsonFile, fmWrite)
   write(file, prettyJson)
   close(file)
@@ -142,6 +144,11 @@ proc setup(args: seq[string]) =
         setBackup(args[i + 1]); break
       except:
         echo "The backup option must be followed by another arugment."
+    of "github":
+      try:
+        setGitHubToken(args[i + 1]); break
+      except: 
+        echo "Usage: lycan --config github <token>"
     else:
       echo &"Unrecognized option {item}\n"
       displayHelp("config")
@@ -249,6 +256,7 @@ of Setup: discard
 rest = configData.addons.filter(addon => addon notin processed)
 final = if action != Remove: concat(processed, rest) else: rest
 writeAddons(final)
+writeConfig(configData)
 
 let t = configData.term
 t.write(0, t.yMax, false, "\n")
