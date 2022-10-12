@@ -147,7 +147,7 @@ proc setup(args: seq[string]) =
         echo "The backup option must be followed by another arugment."
     of "github":
       try:
-        setGitHubToken(args[i + 1]); break
+        configData.githubToken = args[i + 1]; break
       except: 
         echo "Usage: lycan --config github <token>"
     else:

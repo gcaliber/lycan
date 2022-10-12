@@ -417,14 +417,16 @@ proc list*(addon: Addon) =
       else: $addon.kind
     pin = if addon.pinned: "!" else: ""
     branch = if addon.branch.isSome: addon.branch.get() else: ""
+    time = addon.time.format("MM/dd h:mm")
   t.write(1, addon.line, true, colors, style,
     fgBlue, &"{addon.id:<3}",
     fgDefault, &"{addon.name:<32}",
     fgRed, pin,
-    fgGreen, &"{addon.prettyVersion():<18}",
+    fgGreen, &"{addon.prettyVersion():<20}",
     fgCyan, &"{kind:<6}",
     fgDefault, if addon.branch.isSome: "@" else: "",
     fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}",
+    fgDefault, &"{time}",
     resetStyle)
 
 proc restore*(addon: Addon): Option[Addon] =

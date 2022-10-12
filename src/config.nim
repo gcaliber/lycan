@@ -210,6 +210,3 @@ proc setBackup*(arg: string) =
     configData.backupDir = arg
     echo "Backup directory now ", arg
     echo "Existing backup files have been moved."
-
-proc setGithubToken*(arg: string) =
-  configData.githubToken = arg
