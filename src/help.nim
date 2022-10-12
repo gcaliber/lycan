@@ -30,9 +30,9 @@ proc displayHelp*(option: string = "") =
     let x = 2
     let x2 = 4
     t.write(x, t.yMax, true, "-c, --config [options]", "\n\n")
-    t.write(x, t.yMax, true, "Set lycan configuration options including mode, wow path, and backups.\n\n")
+    t.write(x, t.yMax, true, "Set lycan configuration options including mode, wow path, and backups. If no options are provided, displays the current options.\n\n")
     t.write(x, t.yMax, true, "OPTIONS:", "\n")
-    t.write(x2, t.yMax, true, "[m|mode] [retail|wrath|classic]  Set the mode to retail, wrath, or classic\n")
+    t.write(x2, t.yMax, true, "[m|mode] [retail|classic|vanilla]  Set the mode to retail, wrath, or classic\n")
     t.write(x2, t.yMax, true, "    Can also be abbreviated as the first letter\n\n")
     t.write(x2, t.yMax, true, "path   Set the path of the World of Warcraft directory for the current mode.\n\n")
     t.write(x2, t.yMax, true, "backup [path|on|off]   Path sets the backup directory. The default backs up to a folder alongside the WoW AddOns folder.\n")

@@ -132,11 +132,11 @@ proc setVersion(addon: Addon, json: JsonNode) =
 proc getInvalidModeStrings(mode: Mode): seq[string] =
   case configData.mode
   of Retail:
-    result = @["bcc", "tbc", "wotlk", "wrath", "classic"]
+    result = @["bcc", "tbc", "wotlk", "wotlkc", "wrath", "classic"]
   of Classic:
     result = @["mainline", "classic"]
-  of ClassicEra:
-    result = @["mainline", "bcc", "tbc", "wotlk", "wrath"]
+  of Vanilla:
+    result = @["mainline", "bcc", "tbc", "wotlk", "wotlkc", "wrath"]
   of None:
     discard
 

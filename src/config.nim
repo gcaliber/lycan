@@ -170,35 +170,47 @@ proc setPath*(path: string) =
 
 proc setMode*(mode: string) =
   case mode.toLower()
-  of "retail", "r":
+  of "retail", "r", :
+    if configData.mode == Retail:
+      echo "Mode already set to retail"
+    else:
+      echo "Mode set: retail"
     configData.mode = Retail
-  # Need to verify if these are the correct directories
-  of "wrath", "w":
+  of "wrath", "wrathc", "wotlk", "wotlkc", "classic", "w", "c":
+    if configData.mode == Classic:
+      echo "Mode already set to classic"
+    else:
+      echo "Mode set: classic"
     configData.mode = Classic
-  of "classic", "c":
-    configData.mode = ClassicEra
+  of "vanilla", "v":
+    if configData.mode == Vanilla:
+      echo "Mode already set to vanilla"
+    else:
+      echo "Mode set: vanilla"
+    configData.mode = Vanilla
   else:
     echo "Valid modes are"
     echo "  retail    Most recent expansion"
-    echo "  wrath     Wrath of the Lich King Classic"
-    echo "  classic   Vanilla era Classic"
+    echo "  classic   Wrath of the Lich King Classic"
+    echo "  vanilla   Vanilla era Classic"
     echo "These can be shortened to their first letter as well."
   configData = loadConfig(configData.mode)
 
 proc setBackup*(arg: string) =
   case arg.toLower()
-  of "y", "yes", "on", "enable", "true":
+  of "y", "yes", "on", "enable", "enabled", "true":
+    echo "Backups enabled"
     configData.backupEnabled = true
-  of "n", "no", "off", "disable", "false":
+  of "n", "no", "off", "disable", "disabled", "false":
+    echo "Backups disabled"
     configData.backupEnabled = false
   else:
     if not dirExists(arg):
       echo &"Error: Path provided does not exist:\n  {arg}"
-      echo "Enable or disable backups with lycan --config backup on/off"
       quit()
     for kind, path in walkDir(configData.backupDir):
       if kind == pcFile:
         moveFile(path, joinPath(arg, lastPathPart(path)))
     configData.backupDir = arg
-    echo "Backup dir now ", arg
+    echo "Backup directory now ", arg
     echo "Existing backup files have been moved."

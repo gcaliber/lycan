@@ -110,6 +110,20 @@ proc restoreAll(addons: seq[Addon]): seq[Addon] =
   return collect(for a in opt: (if a.isSome: a.get()))
 
 proc setup(args: seq[string]) =
+  if len(args) == 0:
+    assert configData.mode != None
+    let mode = case configData.mode
+      of Retail: "retail"
+      of Classic: "classic"
+      of Vanilla: "vanilla"
+      of None: ""
+    
+    echo &"Mode: {mode}"
+    echo &"Addons directory: {configData.installDir}"
+    echo &"Backups enabled: {configData.backupEnabled}"
+    if configData.backupEnabled:
+      echo &"Backups directory: {configData.backupDir}"
+    
   for i in 0 ..< len(args):
     let item = args[i]
     case item:

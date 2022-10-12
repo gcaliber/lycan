@@ -1,15 +1,16 @@
-import std/strutils
+from std/strutils import repeat
 
 proc indent(s: var string, n: int) =
   s = s & ' '.repeat(n)
 
 proc beautify*(json: string, n: int = 2): string =
-  var s: string
-  var depth = 0
+  var 
+    s: string
+    depth = 0
+    inString = false
 
   for i in 0 ..< len(json):
     let c = json[i]
-    var inString = false
     
     if not inString:
       case c
@@ -36,7 +37,7 @@ proc beautify*(json: string, n: int = 2): string =
       case c
       of '"':
         s = s & c
-        if i > 0 and json[i - 1] != '\\':
+        if i > 1 and json[i - 1] != '\\' and json[i - 2] != '\\':
           inString = false
       else:
         s = s & c
