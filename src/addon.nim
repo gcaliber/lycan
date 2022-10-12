@@ -250,6 +250,7 @@ proc getAddonDirs(addon: Addon): seq[string] =
       else: return collect(for kind, dir in walkDir(parentDir(current)): (if kind == pcDir: dir))
     firstPass = false
 
+# this doesn't work, need to get the correct backup and delete the older one when there is an update
 proc getBackupFile(addon: Addon): string = 
   var name = $addon.kind & addon.project
   for c in invalidFilenameChars:
