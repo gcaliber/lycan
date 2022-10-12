@@ -187,7 +187,7 @@ for kind, key, val in opt.getopt():
       of "unpin":           action = Unpin;   actionCount += 1
       of "restore":         action = Restore; actionCount += 1
       of "c", "config":     action = Setup;   actionCount += 1
-      of "h", "help":       displayHelp(val)
+      of "help":       displayHelp(val) 
       else: displayHelp()
   of cmdArgument:
     args.add(key)
