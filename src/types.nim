@@ -4,7 +4,7 @@ import std/times
 
 type
   Action* = enum
-    Install, Update, Remove, List, Pin, Unpin, Restore, Setup, Empty
+    Install, Update, Remove, List, Pin, Unpin, Restore, Setup, Empty, Help
 
   Mode* = enum
     Retail = "retail",

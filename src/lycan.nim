@@ -127,29 +127,20 @@ proc setup(args: seq[string]) =
       echo &"Backups directory: {configData.backupDir}"
     quit()
 
-  for i in 0 ..< len(args):
+  if len(args) < 2:
+    echo "Missing argument\n"
+    displayHelp("config")
+  for i in 0 ..< len(args) - 1:
     let item = args[i]
     case item:
     of "path":
-      try:
-        setPath(args[i + 1]); break
-      except:
-        echo "The path option must be followed by a path."
+      setPath(args[i + 1]); break
     of "m", "mode":
-      try:
-        setMode(args[i + 1]); break
-      except:
-        echo "The mode option must be followed by the desired mode."
+      setMode(args[i + 1]); break
     of "backup":
-      try:
-        setBackup(args[i + 1]); break
-      except:
-        echo "The backup option must be followed by another arugment."
+      setBackup(args[i + 1]); break
     of "github":
-      try:
-        configData.githubToken = args[i + 1]; break
-      except: 
-        echo "Usage: lycan --config github <token>"
+      configData.githubToken = args[i + 1]; break
     else:
       echo &"Unrecognized option {item}\n"
       displayHelp("config")
@@ -187,7 +178,7 @@ for kind, key, val in opt.getopt():
       of "unpin":           action = Unpin;   actionCount += 1
       of "restore":         action = Restore; actionCount += 1
       of "c", "config":     action = Setup;   actionCount += 1
-      of "help":       displayHelp(val) 
+      of "help":            action = Help;    actionCount += 1
       else: displayHelp()
   of cmdArgument:
     args.add(key)
@@ -236,6 +227,8 @@ of List:
     line += 1
 of Setup:
   setup(args)
+of Help:
+  displayHelp(args[0])
 
 var processed, rest, final: seq[Addon]
 case action
@@ -253,7 +246,7 @@ of Restore:
 of List: 
   addons.apply(list)
   quit()
-of Setup: discard
+of Help, Setup: discard
 
 rest = configData.addons.filter(addon => addon notin processed)
 final = if action != Remove: concat(processed, rest) else: rest
