@@ -12,7 +12,7 @@ import std/sugar
 import std/terminal
 import std/times
 
-import zip/zipfiles
+import zippy/ziparchives
 
 import config
 import types
@@ -199,6 +199,7 @@ proc getLatest(addon: Addon): Future[AsyncResponse] {.async.} =
 
 
 proc download(addon: Addon) {.async.} =
+  if addon.state == Failed: return
   var headers = newHttpHeaders()
   case addon.kind
   of Github, GithubRepo:
@@ -321,15 +322,10 @@ proc createBackup(addon: Addon) =
 
 proc unzip(addon: Addon) =
   if addon.state == Failed: return
-  var z: ZipArchive
-  if not z.open(addon.filename):
-    addon.setAddonState(Failed, &"Failed to open archive: {addon.filename}")
-    return
   let (_, name, _) = splitFile(addon.filename)
   addon.extractDir = joinPath(configData.tempDir, name)
   try:
-    z.extractAll(addon.extractDir)
-    z.close()
+    extractAll(addon.filename, addon.extractDir)
   except CatchableError as e:
     addon.setAddonState(Failed, e.msg)
 
