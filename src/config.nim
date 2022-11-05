@@ -6,7 +6,6 @@ import std/times
 
 import types
 import term
-import jsonbeautify
 
 proc fromJsonHook(a: var Addon, j: JsonNode) =
   var
@@ -88,7 +87,7 @@ proc writeConfig*(config: Config) =
   j[mode]["backupDir"] = %config.backupDir
   
 
-  let prettyJson = beautify($j)
+  let prettyJson = pretty(j)
   let path = if config.local: localPath else: configPath
   let file = open(path, fmWrite)
   write(file, prettyJson)

@@ -25,7 +25,6 @@ import std/times
 import addon
 import config
 import help
-import jsonbeautify
 import term
 import types
 
@@ -56,9 +55,9 @@ proc writeAddons(addons: var seq[Addon]) =
   if len(addons) == 0: return
   addons.sort((a, z) => a.name.toLower() > z.name.toLower())
   let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
-  let p = pretty(addonsJson)
+  let prettyJson = pretty(addonsJson)
   let file = open(configData.addonJsonFile, fmWrite)
-  write(file, p)
+  write(file, prettyJson)
   close(file)
   
 proc addonFromUrl(url: string): Option[Addon] =
