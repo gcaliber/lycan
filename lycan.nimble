@@ -10,5 +10,5 @@ bin           = @["lycan"]
 
 # Dependencies
 
-requires "nim >= 1.6.6"
-requires "zip"
+requires "nim >= 1.7.3"
+requires "zip >= 0.10.4"

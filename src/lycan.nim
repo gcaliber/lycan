@@ -56,9 +56,9 @@ proc writeAddons(addons: var seq[Addon]) =
   if len(addons) == 0: return
   addons.sort((a, z) => a.name.toLower() > z.name.toLower())
   let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
-  let prettyJson = beautify($addonsJson)
+  let p = pretty(addonsJson)
   let file = open(configData.addonJsonFile, fmWrite)
-  write(file, prettyJson)
+  write(file, p)
   close(file)
   
 proc addonFromUrl(url: string): Option[Addon] =

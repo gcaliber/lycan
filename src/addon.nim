@@ -234,7 +234,7 @@ proc download(addon: Addon) {.async.} =
   if futureBody.failed:
     addon.setAddonState(Failed, &"Download failed: {addon.downloadUrl}")
     return
-  io.write(file, futureBody.read())
+  system.write(file, futureBody.read())
   close(file)
 
 proc processTocs(path: string): bool =
