@@ -45,7 +45,7 @@ proc getWowDir(mode: Mode): string =
     createDir("/home/mike/projects/lycan/test/_retail_/Interface/AddOns")
     createDir("/home/mike/projects/lycan/test/_retail_/WTF")
     return "/home/mike/projects/lycan/test/"
-  var root = joinPath(getHomeDir())
+  var root = getHomeDir()
   when defined(windows):
     let default = joinPath("C:", "Program Files (x86)", "World of Warcraft")
     if pathExists(default):
@@ -53,7 +53,7 @@ proc getWowDir(mode: Mode): string =
     root = "C:"
   for path in walkDirRec(root, yieldFilter = {pcDir}):
     let dir = '_' & $mode & '_'
-    if path.contains(joinPath("World of Warcraft", dir)):
+    if path.contains("World of Warcraft" / dir):
       var wow = path
       while not wow.endsWith("World of Warcraft"):
         wow = parentDir(wow)
@@ -72,7 +72,7 @@ proc getWowDir(mode: Mode): string =
 
 let 
   lycanConfigFile: string = "lycan.cfg"
-  localPath: string = joinPath(getCurrentDir(), lycanConfigFile)
+  localPath: string = getCurrentDir() / lycanConfigFile
   configPath: string = joinPath(getConfigDir(), "lycan", lycanConfigFile)
 
 proc writeConfig*(config: Config) =
@@ -205,7 +205,7 @@ proc setBackup*(arg: string) =
       quit()
     for kind, path in walkDir(configData.backupDir):
       if kind == pcFile:
-        moveFile(path, joinPath(arg, lastPathPart(path)))
+        moveFile(path, arg / lastPathPart(path))
     configData.backupDir = arg
     echo "Backup directory now ", arg
     echo "Existing backup files have been moved."

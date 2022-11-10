@@ -222,7 +222,7 @@ proc download(addon: Addon) {.async.} =
     downloadName = response.headers["content-disposition"].split('=')[1].strip(chars = {'\'', '"'})
   except KeyError:
     downloadName = addon.downloadUrl.split('/')[^1]
-  addon.filename = joinPath(configData.tempDir, downloadName)
+  addon.filename = configData.tempDir / downloadName
   var file: File
   try:
     file = open(addon.filename, fmWrite)
@@ -247,7 +247,7 @@ proc processTocs(path: string): bool =
           var m: array[2, string]
           discard find(cstring(name), p, m, 0, len(name))
           name = m[0]
-          moveDir(dir, joinPath(parentDir(dir), name))
+          moveDir(dir, parentDir(dir) / name)
         return true
   return false
 
@@ -300,7 +300,7 @@ proc moveDirs(addon: Addon) =
   for dir in source:
     let name = lastPathPart(dir)
     addon.dirs.add(name)
-    let destination = joinPath(configData.installDir, name)
+    let destination = configData.installDir / name
     try:
       moveDir(dir, destination)
     except CatchableError as e:
@@ -316,14 +316,14 @@ proc createBackup(addon: Addon) =
   if len(backups) > 1:
     removeFile(backups[0])
   try:
-    moveFile(addon.filename, joinPath(configData.backupDir, name))
+    moveFile(addon.filename, configData.backupDir / name)
   except CatchableError as e:
     addon.setAddonState(Failed, e.msg)
 
 proc unzip(addon: Addon) =
   if addon.state == Failed: return
   let (_, name, _) = splitFile(addon.filename)
-  addon.extractDir = joinPath(configData.tempDir, name)
+  addon.extractDir = configData.tempDir / name
   try:
     extractAll(addon.filename, addon.extractDir)
   except CatchableError as e:
