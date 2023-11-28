@@ -179,7 +179,7 @@ proc setPath*(path: string) =
 
 proc setMode*(mode: string) =
   case mode.toLower()
-  of "retail", "r", :
+  of "retail", "r":
     configData.mode = Retail
   of "wrath", "wrathc", "wotlk", "wotlkc", "classic", "w", "c":
     configData.mode = Classic

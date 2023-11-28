@@ -1,11 +1,11 @@
 # https://github.com/Stanzilla/AdvancedInterfaceOptions
 # https://github.com/Tercioo/Plater-Nameplates/tree/master
-# https://gitlab.com/siebens/legacy/autoactioncam
+# https://gitlab.com/woblight/actionmirroringframe
 # https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
 # https://www.tukui.org/download.php?ui=elvui
 # https://www.tukui.org/addons.php?id=209
 
-# https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/siebens/legacy/autoactioncam https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html https://www.tukui.org/download.php?ui=elvui https://www.tukui.org/addons.php?id=209
+# https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/woblight/actionmirroringframe https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html https://www.tukui.org/download.php?ui=elvui https://www.tukui.org/addons.php?id=209
 
 # https://github.com/p3lim-wow/QuickQuest https://www.tukui.org/download.php?ui=elvui https://github.com/AdiAddons/AdiBags
 
@@ -53,7 +53,7 @@ proc toJsonHook(a: Addon): JsonNode =
 
 proc writeAddons(addons: var seq[Addon]) =
   if len(addons) == 0: return
-  addons.sort((a, z) => a.name.toLower() > z.name.toLower())
+  addons.sort((a, z) => int(a.name.toLower() > z.name.toLower()))
   let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
   let prettyJson = pretty(addonsJson)
   let file = open(configData.addonJsonFile, fmWrite)
@@ -68,7 +68,6 @@ proc addonFromUrl(url: string): Option[Addon] =
     return none(Addon)
   case urlmatch[0].toLower()
     of "github":
-      # https://api.github.com/repos/Tercioo/Plater-Nameplates/releases/latest
       let p = re"^(.+?/.+?)(?:/|$)(?:tree/)?(.+)?"
       var m: array[2, string]
       discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
@@ -77,18 +76,14 @@ proc addonFromUrl(url: string): Option[Addon] =
       else:
         return some(newAddon(m[0], GithubRepo, branch = some(m[1])))
     of "gitlab":
-      # https://gitlab.com/api/v4/projects/siebens%2Flegacy%2Fautoactioncam/releases
       return some(newAddon(urlmatch[1], Gitlab))
     of "tukui":
-      let p = re"^(download|addons)\.php\?(?:ui|id)=(.+)"
-      var m: array[2, string]
-      discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
-      if m[0] == "download":
-        return some(newAddon(m[1], TukuiMain))
-      else:
-        return some(newAddon(m[1], TukuiAddon))
+      # let p = re"^(download|addons)\.php\?(?:ui|id)=(.+)"
+      # var m: array[2, string]
+      # discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
+      # if m[0] == "download":
+      return some(newAddon(urlmatch[1], Tukui))
     of "wowinterface":
-      # https://api.mmoui.com/v3/game/WOW/filedetails/24608.json
       let p = re"^downloads\/info(\d+)-"
       var m: array[1, string]
       discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
@@ -220,7 +215,7 @@ of Remove, Restore, Pin, Unpin:
 of List:
   addons = configData.addons
   if "t" in args or "time" in args:
-    addons.sort((a, z) => a.time < z.time)
+    addons.sort((a, z) => int(a.time < z.time))
   for addon in addons:
     addon.line = line
     line += 1
@@ -233,7 +228,7 @@ var processed, rest, final: seq[Addon]
 case action
 of Install, Update, Empty:
   processed = waitFor addons.installAll()
-  assignIds(processed)
+  assignIds(processed.concat(configData.addons))
 of Remove:
   processed = addons.map(uninstall)
 of Pin:

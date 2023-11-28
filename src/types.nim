@@ -9,7 +9,7 @@ type
   Mode* = enum
     Retail = "retail",
     Classic = "classic",
-    Vanilla = "clasic_era",
+    Vanilla = "classic_era",
     None = "",
 
   AddonState* = enum
@@ -30,7 +30,7 @@ type
     NoBackup = "Not Found"
   
   AddonKind* = enum
-    Github, GithubRepo, Gitlab, TukuiMain, TukuiAddon, Wowint,
+    Github, GithubRepo, Gitlab, Tukui, Wowint,
 
   Error* = object
     addon*: Addon

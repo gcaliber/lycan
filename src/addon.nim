@@ -107,7 +107,7 @@ proc setName(addon: Addon, json: JsonNode) =
   case addon.kind
   of Github, GithubRepo, Gitlab:
     addon.name = addon.project.split('/')[^1]
-  of TukuiMain, TukuiAddon:
+  of Tukui:
     addon.name = json["name"].getStr()
   of Wowint:
     addon.name = json[0]["UIName"].getStr()
@@ -124,7 +124,7 @@ proc setVersion(addon: Addon, json: JsonNode) =
   of Gitlab:
     let v = json[0]["tag_name"].getStr()
     addon.version = if v != "": v else: json[0]["name"].getStr()
-  of TukuiMain, TukuiAddon:
+  of Tukui:
     addon.version = json["version"].getStr()
   of Wowint:
     addon.version = json[0]["UIVersion"].getStr()
@@ -162,7 +162,7 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) =
     for s in json[0]["assets"]["sources"]:
       if s["format"].getStr() == "zip":
         addon.downloadUrl = s["url"].getStr()
-  of TukuiMain, TukuiAddon:
+  of Tukui:
     addon.downloadUrl = json["url"].getStr()
   of Wowint:
     addon.downloadUrl = json[0]["UIDownload"].getStr()
@@ -175,10 +175,8 @@ proc getLatestUrl(addon: Addon): string =
     of Gitlab:
       let urlEncodedProject = addon.project.replace("/", "%2F")
       return &"https://gitlab.com/api/v4/projects/{urlEncodedProject}/releases"
-    of TukuiMain:
-        return &"https://www.tukui.org/api.php?ui={addon.project}"
-    of TukuiAddon:
-      return "https://www.tukui.org/api.php?addons"
+    of Tukui:
+      return "https://api.tukui.org/v1/addons/"
     of Wowint:
       return &"https://api.mmoui.com/v3/game/WOW/filedetails/{addon.project}.json"
     of GithubRepo:
@@ -324,6 +322,7 @@ proc unzip(addon: Addon) =
   if addon.state == Failed: return
   let (_, name, _) = splitFile(addon.filename)
   addon.extractDir = configData.tempDir / name
+  removeDir(addon.extractDir)
   try:
     extractAll(addon.filename, addon.extractDir)
   except CatchableError as e:
@@ -331,27 +330,24 @@ proc unzip(addon: Addon) =
 
 proc getLatestJson(addon: Addon): Future[JsonNode] {.async.} =
   var json: JsonNode
-  if addon.kind != TukuiAddon or (addon.kind == TukuiAddon and configData.tukuiCache.isNil):
-    let futureResponse = addon.getLatest()
-    yield futureResponse
-    if futureResponse.failed:
-      addon.setAddonState(Failed, &"No response: {addon.getLatestUrl()}")
-      return
-    let response = futureResponse.read()
-    if not response.status.contains("200"):
-      addon.setAddonState(Failed, err = &"Response {response.status}: {addon.getLatestUrl()}")
-      return
-    let futureBody = response.body
-    yield futureBody
-    if futureBody.failed:
-      addon.setAddonState(Failed, &"Failed to download json: {addon.getLatestUrl()}")
-      return
-    json = parseJson(futureBody.read())
-  if addon.kind == TukuiAddon:
-    if configData.tukuiCache.isNil:
-      configData.tukuiCache = json
-    for node in configData.tukuiCache:
-      if node["id"].getStr() == addon.project:
+  let futureResponse = addon.getLatest()
+  yield futureResponse
+  if futureResponse.failed:
+    addon.setAddonState(Failed, &"No response: {addon.getLatestUrl()}")
+    return
+  let response = futureResponse.read()
+  if not response.status.contains("200"):
+    addon.setAddonState(Failed, err = &"Response {response.status}: {addon.getLatestUrl()}")
+    return
+  let futureBody = response.body
+  yield futureBody
+  if futureBody.failed:
+    addon.setAddonState(Failed, &"Failed to download json: {addon.getLatestUrl()}")
+    return
+  json = parseJson(futureBody.read())
+  if addon.kind == Tukui:
+    for node in json:
+      if node["slug"].getStr() == addon.project:
         return node
     addon.setAddonState(Failed, "Addon not found in json")
     return
@@ -408,7 +404,6 @@ proc list*(addon: Addon) =
     colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
     style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
     kind = case addon.kind 
-      of TukuiMain, TukuiAddon: "Tukui"
       of GithubRepo: "Github"
       else: $addon.kind
     pin = if addon.pinned: "!" else: ""
@@ -418,7 +413,7 @@ proc list*(addon: Addon) =
     fgBlue, &"{addon.id:<3}",
     fgDefault, &"{addon.name:<32}",
     fgRed, pin,
-    fgGreen, &"{addon.prettyVersion():<20}",
+    fgGreen, &"{addon.prettyVersion():<24}",
     fgCyan, &"{kind:<6}",
     fgDefault, if addon.branch.isSome: "@" else: "",
     fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}",
