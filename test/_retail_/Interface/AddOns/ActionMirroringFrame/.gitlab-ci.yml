@@ -1,0 +1,52 @@
+prepare_job:
+  stage: .pre
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never                                             # Do not run this job when a tag is created manually
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  script:
+    - echo "EXTRA_DESCRIPTION=some message" >> variables.env  # Generate the EXTRA_DESCRIPTION and TAG environment variables
+    - echo "TAG=v$(git describe --long)" >> variables.env             # and append to the variables.env file
+  artifacts:
+    reports:
+      dotenv: variables.env                                   # Use artifacts:reports:dotenv to expose the variables to other jobs
+
+build_job:
+  stage: build
+  script:
+    - 'sed -i "s/## Version: 0.1/## Version: $TAG/" *.toc'
+    - mkdir $CI_PROJECT_TITLE
+    - mv $(cat *.toc|grep lua|sort|uniq) *.toc *.tga README.md $CI_PROJECT_TITLE
+    - echo "DOWNLOAD_URL=$CI_JOB_URL/artifacts/download" >> variables.env
+  artifacts:
+    name: $CI_PROJECT_TITLE
+    paths:
+      - $CI_PROJECT_TITLE
+    reports:
+      dotenv: variables.env   
+  
+release_job:
+  stage: deploy
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  needs:
+    - job: prepare_job
+      artifacts: true
+    - job: build_job
+      artifacts: true
+  rules:
+    - if: $CI_COMMIT_TAG
+      when: never                                  # Do not run this job when a tag is created manually
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH  # Run this job when commits are pushed or merged to the default branch
+  script:
+    - echo "running release_job for $TAG"
+  release:
+    name: 'Release $TAG'
+    description: 'Website: https://woblight.gitlab.io/overview/$CI_PROJECT_TITLE/'
+    tag_name: '$TAG-auto'
+    ref: '$CI_COMMIT_SHA'
+    assets:
+      links:
+        - name: '$CI_PROJECT_TITLE'
+          url: '$DOWNLOAD_URL'
+          filepath: '/$CI_PROJECT_TITLE' # optional
+          link_type: 'package' # optional

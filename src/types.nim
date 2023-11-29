@@ -30,7 +30,7 @@ type
     NoBackup = "Not Found"
   
   AddonKind* = enum
-    Github, GithubRepo, Gitlab, Tukui, Wowint,
+    Github, GithubRepo, Gitlab, Tukui, Wowint, # Curse
 
   Error* = object
     addon*: Addon
