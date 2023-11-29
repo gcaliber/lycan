@@ -48,7 +48,7 @@ proc getWowDir(mode: Mode): string =
   var root = getHomeDir()
   when defined(windows):
     let default = joinPath("C:", "Program Files (x86)", "World of Warcraft")
-    if pathExists(default):
+    if dirExists(default):
       return default
     root = "C:"
   for path in walkDirRec(root, yieldFilter = {pcDir}):

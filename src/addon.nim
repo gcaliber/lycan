@@ -1,6 +1,7 @@
 import std/algorithm
 import std/asyncdispatch
 import std/colors
+import std/enumerate
 import std/httpclient
 import std/json
 import std/jsonutils
@@ -59,42 +60,42 @@ proc stateMessage(addon: Addon) =
   case addon.state
   of Checking, Parsing:
     t.write(indent, addon.line, true, colors, style,
-      fgCyan, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
+      fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
       fgYellow, &"{addon.prettyOldVersion()}", resetStyle)
   of Downloading, Installing, Restoring:
     t.write(indent, addon.line, true, colors, style,
-      fgCyan, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
-      fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
+      fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
+      fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of FinishedUpdated, FinishedInstalled:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
-      fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
+      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
+      fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of FinishedAlreadyCurrent:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
+      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
       fgYellow, &"{addon.prettyVersion()}", resetStyle)
   of FinishedPinned:
     t.write(indent, addon.line, true, colors, style,
-      fgYellow, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
-      styleBright, fgRed, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", 
+      fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
+      styleBright, fgRed, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", 
       if addon.version != addon.oldVersion: fgGreen else: fgYellow,
       &"{addon.prettyVersion()}", resetStyle)
   of Removed, Pinned:
     t.write(indent, addon.line, true, colors, style,
-      fgYellow, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
+      fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Unpinned:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
+      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Restored:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
-      fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
+      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
+      fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Failed, NoBackup:
     t.write(indent, addon.line, true, colors, style,
-      fgRed, &"{$addon.state:<12}", fgDefault, &"{addon.getName():<32}",
-      fgYellow, &"{addon.prettyOldVersion()}", fgDefault, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
+      fgRed, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
+      fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
 
 proc setAddonState(addon: Addon, state: AddonState, err: string = "", sendMessage: bool = true) =
   if addon.state != Failed:
@@ -104,11 +105,26 @@ proc setAddonState(addon: Addon, state: AddonState, err: string = "", sendMessag
   if sendMessage:
     addon.stateMessage()
 
+proc curseDataIndex(json: JsonNode): int =
+  var gameVersions: seq[string]
+  var match = case configData.mode
+    of Retail: "10."
+    of Vanilla: "1."
+    of Tbc: "2."
+    of Wrath: "3."
+    of None: ""
+  for i, data in enumerate(json["data"]):
+    gameVersions.fromJson(data["gameVersions"])
+    for num in gameVersions:
+      if num.startsWith(match):
+        return i
+  return -1
+
 proc setName(addon: Addon, json: JsonNode, name: string = "none") =
   if addon.state == Failed: return
   case addon.kind
   of Curse:
-    addon.name = name
+    discard
   of Github, GithubRepo, Gitlab:
     addon.name = addon.project.split('/')[^1]
   of Tukui:
@@ -121,7 +137,8 @@ proc setVersion(addon: Addon, json: JsonNode) =
   addon.old_version = addon.version
   case addon.kind
   of Curse:
-    addon.version = json["displayName"].getStr()
+    let index = curseDataIndex(json)
+    addon.version = json["data"][index]["displayName"].getStr()
   of Github:
     let v = json["tag_name"].getStr()
     addon.version = if v != "": v else: json["name"].getStr()
@@ -152,23 +169,10 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) =
   if addon.state == Failed: return
   case addon.kind
   of Curse:
-    var id = ""
-    var gameVersions: seq[string]
-    var match = case configData.mode
-      of Retail: "10."
-      of Vanilla: "1."
-      of Tbc: "2."
-      of Wrath: "3."
-      of None: ""
-    for item in json["data"]:
-      gameVersions.fromJson(item["gameVersions"])
-      for num in gameVersions:
-        if num.startsWith(match):
-          id = item["id"].getStr()
-          break
-      if id == "":
-        addon.setAddonState(Failed, &"Could not find valid game version for download.")
-        return
+    let index = curseDataIndex(json)
+    if index == -1:
+      addon.setAddonState(Failed, "Unable to find download.")
+    let id = $json["data"][index]["id"].getInt()
     addon.downloadUrl = &"https://www.curseforge.com/api/v1/mods/{addon.project}/files/{id}/download"
   of Github:
     let assets = json["assets"]
@@ -225,7 +229,7 @@ proc getLatest(addon: Addon): Future[AsyncResponse] {.async.} =
   return await client.get(url)
 
 
-proc download(addon: Addon) {.async.} =
+proc download(addon: Addon, json: JsonNode) {.async.} =
   if addon.state == Failed: return
   var headers = newHttpHeaders()
   case addon.kind
@@ -245,10 +249,15 @@ proc download(addon: Addon) {.async.} =
     addon.setAddonState(Failed, err = &"Response {response.status}: {addon.getLatestUrl()}")
     return
   var downloadName: string
-  try:
-    downloadName = response.headers["content-disposition"].split('=')[1].strip(chars = {'\'', '"'})
-  except KeyError:
-    downloadName = addon.downloadUrl.split('/')[^1]
+  case addon.kind:
+  of Curse:
+    let index = curseDataIndex(json)
+    downloadName = json["data"][index]["fileName"].getStr()
+  else:
+    try:
+      downloadName = response.headers["content-disposition"].split('=')[1].strip(chars = {'\'', '"'})
+    except KeyError:
+      downloadName = addon.downloadUrl.split('/')[^1]
   addon.filename = configData.tempDir / downloadName
   var file: File
   try:
@@ -395,7 +404,7 @@ proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
     addon.setDownloadUrl(json)
     addon.setName(json)
     addon.setAddonState(Downloading)
-    await addon.download()
+    await addon.download(json)
     addon.setAddonState(Installing)
     addon.unzip()
     addon.createBackup()
@@ -440,13 +449,13 @@ proc list*(addon: Addon) =
     time = addon.time.format("MM/dd h:mm")
   t.write(1, addon.line, true, colors, style,
     fgBlue, &"{addon.id:<3}",
-    fgDefault, &"{addon.name:<32}",
+    fgWhite, &"{addon.name:<32}",
     fgRed, pin,
     fgGreen, &"{addon.prettyVersion():<24}",
     fgCyan, &"{kind:<6}",
-    fgDefault, if addon.branch.isSome: "@" else: "",
+    fgWhite, if addon.branch.isSome: "@" else: "",
     fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}",
-    fgDefault, &"{time}",
+    fgWhite, &"{time}",
     resetStyle)
 
 proc restore*(addon: Addon): Option[Addon] =

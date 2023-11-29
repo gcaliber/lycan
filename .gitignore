@@ -2,6 +2,7 @@ nimcache/
 nimblecache/
 htmldocs/
 src/lycan
+src/lycan.exe
 # test/addons*
 # test/_retail_*
 src/test*

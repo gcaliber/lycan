@@ -34,5 +34,17 @@
       "QuickQuest"
     ],
     "time": "2023-11-28T14:03"
+  },
+  {
+    "project": "7474",
+    "name": "WIM (WoW Instant Messenger) v3",
+    "kind": "Curse",
+    "version": "3.10.16",
+    "id": 3,
+    "pinned": false,
+    "dirs": [
+      "WIM"
+    ],
+    "time": "2023-11-29T11:44"
   }
 ]

@@ -66,7 +66,7 @@ proc curseAddonFromUrl(url: string): Future[Addon] {.async.} =
     "excludeSwitches": ["enable-automation", "enable-logging"],
     "args": ["-window-size=1024,800"]
   }
-  await driver.startSession(options, headless = true)
+  await driver.startSession(options, headless = false)
   await driver.setUrl(url & "/download")
 
   var element = await driver.waitElement(xPath, "/html/body/div/main/div[3]/div[1]/p/a")
@@ -77,7 +77,8 @@ proc curseAddonFromUrl(url: string): Future[Addon] {.async.} =
 
   element = await driver.waitElement(xPath, "/html/body/div/main/div[4]/div/h1")
   let name = await driver.getElementText(element)
-  result = newAddon(match[0], Curse)
+  result = newAddon(match[0], Curse, name = name)
+  await driver.close()
 
 proc addonFromUrl(url: string): Option[Addon] =
   var urlmatch: array[2, string]
