@@ -3,6 +3,7 @@ import std/asyncdispatch
 import std/colors
 import std/httpclient
 import std/json
+import std/jsonutils
 import std/options
 import std/os
 import std/re
@@ -21,11 +22,12 @@ import term
 proc `==`*(a, b: Addon): bool {.inline.} =
   a.project == b.project
 
-proc newAddon*(project: string, kind: AddonKind, branch: Option[string] = none(string)): Addon =
+proc newAddon*(project: string, kind: AddonKind, branch: Option[string] = none(string), name: string = ""): Addon =
   result = new(Addon)
   result.project = project
   result.kind = kind
   result.branch = branch
+  result.name = name
 
 proc prettyVersion(addon: Addon): string =
   if addon.version.isEmptyOrWhitespace: return ""
@@ -102,9 +104,11 @@ proc setAddonState(addon: Addon, state: AddonState, err: string = "", sendMessag
   if sendMessage:
     addon.stateMessage()
 
-proc setName(addon: Addon, json: JsonNode) =
+proc setName(addon: Addon, json: JsonNode, name: string = "none") =
   if addon.state == Failed: return
   case addon.kind
+  of Curse:
+    addon.name = name
   of Github, GithubRepo, Gitlab:
     addon.name = addon.project.split('/')[^1]
   of Tukui:
@@ -116,6 +120,8 @@ proc setVersion(addon: Addon, json: JsonNode) =
   if addon.state == Failed: return
   addon.old_version = addon.version
   case addon.kind
+  of Curse:
+    addon.version = json["displayName"].getStr()
   of Github:
     let v = json["tag_name"].getStr()
     addon.version = if v != "": v else: json["name"].getStr()
@@ -133,16 +139,37 @@ proc getInvalidModeStrings(mode: Mode): seq[string] =
   case configData.mode
   of Retail:
     result = @["bcc", "tbc", "wotlk", "wotlkc", "wrath", "classic"]
-  of Classic:
-    result = @["mainline", "classic"]
   of Vanilla:
     result = @["mainline", "bcc", "tbc", "wotlk", "wotlkc", "wrath"]
+  of Tbc:
+    result = @["mainline", "wotlk", "wotlkc", "wrath"]
+  of Wrath:
+    result = @["mainline", "bcc", "tbc", "classic"]
   of None:
     discard
 
 proc setDownloadUrl(addon: Addon, json: JsonNode) =
   if addon.state == Failed: return
   case addon.kind
+  of Curse:
+    var id = ""
+    var gameVersions: seq[string]
+    var match = case configData.mode
+      of Retail: "10."
+      of Vanilla: "1."
+      of Tbc: "2."
+      of Wrath: "3."
+      of None: ""
+    for item in json["data"]:
+      gameVersions.fromJson(item["gameVersions"])
+      for num in gameVersions:
+        if num.startsWith(match):
+          id = item["id"].getStr()
+          break
+      if id == "":
+        addon.setAddonState(Failed, &"Could not find valid game version for download.")
+        return
+    addon.downloadUrl = &"https://www.curseforge.com/api/v1/mods/{addon.project}/files/{id}/download"
   of Github:
     let assets = json["assets"]
     if len(assets) != 0:
@@ -170,6 +197,8 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) =
 
 proc getLatestUrl(addon: Addon): string =
   case addon.kind
+    of Curse:
+      return &"https://www.curseforge.com/api/v1/mods/{addon.project}/files"
     of Github:
       return &"https://api.github.com/repos/{addon.project}/releases/latest"
     of Gitlab:

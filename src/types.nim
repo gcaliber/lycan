@@ -8,8 +8,9 @@ type
 
   Mode* = enum
     Retail = "retail",
-    Classic = "classic",
-    Vanilla = "classic_era",
+    Vanilla = "classic_vanilla",
+    Tbc = "classic_tbc",
+    Wrath = "classic_wrath"
     None = "",
 
   AddonState* = enum
@@ -30,7 +31,7 @@ type
     NoBackup = "Not Found"
   
   AddonKind* = enum
-    Github, GithubRepo, Gitlab, Tukui, Wowint, # Curse
+    Github, GithubRepo, Gitlab, Tukui, Wowint, Curse
 
   Error* = object
     addon*: Addon

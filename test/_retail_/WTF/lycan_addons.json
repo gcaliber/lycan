@@ -1,17 +1,5 @@
 [
   {
-    "project": "woblight/actionmirroringframe",
-    "name": "actionmirroringframe",
-    "kind": "Gitlab",
-    "version": "v0.3-6-g22031ef-auto",
-    "id": 3,
-    "pinned": false,
-    "dirs": [
-      "ActionMirroringFrame"
-    ],
-    "time": "2023-11-28T14:15"
-  },
-  {
     "project": "Stanzilla/AdvancedInterfaceOptions",
     "name": "AdvancedInterfaceOptions",
     "kind": "Github",
@@ -22,20 +10,6 @@
       "AdvancedInterfaceOptions"
     ],
     "time": "2023-11-28T14:15"
-  },
-  {
-    "project": "elvui",
-    "name": "ElvUI",
-    "kind": "Tukui",
-    "version": "13.52",
-    "id": 5,
-    "pinned": false,
-    "dirs": [
-      "ElvUI",
-      "ElvUI_Libraries",
-      "ElvUI_Options"
-    ],
-    "time": "2023-11-28T15:01"
   },
   {
     "project": "24608",
@@ -60,17 +34,5 @@
       "QuickQuest"
     ],
     "time": "2023-11-28T14:03"
-  },
-  {
-    "project": "tukui",
-    "name": "Tukui",
-    "kind": "Tukui",
-    "version": "20.41",
-    "id": 6,
-    "pinned": false,
-    "dirs": [
-      "Tukui"
-    ],
-    "time": "2023-11-28T15:04"
   }
 ]

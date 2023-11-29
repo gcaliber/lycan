@@ -181,14 +181,17 @@ proc setMode*(mode: string) =
   case mode.toLower()
   of "retail", "r":
     configData.mode = Retail
-  of "wrath", "wrathc", "wotlk", "wotlkc", "classic", "w", "c":
-    configData.mode = Classic
+  of "wrath", "wrathc", "wotlk", "wotlkc", "w":
+    configData.mode = Wrath
+  of "tbc", "bcc", "t":
+    configData.mode = Tbc
   of "vanilla", "v":
     configData.mode = Vanilla
   else:
     echo "Valid modes are"
-    echo "  retail    Most recent expansion"
-    echo "  classic   Wrath of the Lich King Classic"
+    echo "  retail    Most recent retail expansion"
+    echo "  tbc       The Burning Crusade Classic"
+    echo "  wrath     Wrath of the Lich King Classic"
     echo "  vanilla   Vanilla era Classic"
     echo "These can be shortened to their first letter as well."
   configData = loadConfig(configData.mode)

@@ -2,10 +2,8 @@
 # https://github.com/Tercioo/Plater-Nameplates/tree/master
 # https://gitlab.com/woblight/actionmirroringframe
 # https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
-# https://www.tukui.org/download.php?ui=elvui
-# https://www.tukui.org/addons.php?id=209
 
-# https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/woblight/actionmirroringframe https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html https://www.tukui.org/download.php?ui=elvui https://www.tukui.org/addons.php?id=209
+# https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/woblight/actionmirroringframe https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
 
 # https://github.com/p3lim-wow/QuickQuest https://www.tukui.org/download.php?ui=elvui https://github.com/AdiAddons/AdiBags
 
@@ -21,6 +19,8 @@ import std/[strformat, strutils]
 import std/sugar
 import std/terminal
 import std/times
+
+import webdriver/chromedriver
 
 import addon
 import config
@@ -59,7 +59,26 @@ proc writeAddons(addons: var seq[Addon]) =
   let file = open(configData.addonJsonFile, fmWrite)
   write(file, prettyJson)
   close(file)
-  
+
+proc curseAddonFromUrl(url: string): Future[Addon] {.async.} =
+  var driver = newChromeDriver()
+  var options = %*{
+    "excludeSwitches": ["enable-automation", "enable-logging"],
+    "args": ["-window-size=1024,800"]
+  }
+  await driver.startSession(options, headless = true)
+  await driver.setUrl(url & "/download")
+
+  var element = await driver.waitElement(xPath, "/html/body/div/main/div[3]/div[1]/p/a")
+  let api = await driver.getElementAttribute(element, "href")
+  var match: array[1, string]
+  let pattern = re"\/mods\/(\d+)\/"
+  discard find(cstring(api), pattern, match, 0, len(api))
+
+  element = await driver.waitElement(xPath, "/html/body/div/main/div[4]/div/h1")
+  let name = await driver.getElementText(element)
+  result = newAddon(match[0], Curse)
+
 proc addonFromUrl(url: string): Option[Addon] =
   var urlmatch: array[2, string]
   let pattern = re"^(?:https?://)?(?:www\.)?(.+)\.(?:com|org)/(.+[^/\n])"
@@ -67,6 +86,8 @@ proc addonFromUrl(url: string): Option[Addon] =
   if found == -1:
     return none(Addon)
   case urlmatch[0].toLower()
+    of "curseforge":
+      return some(waitFor curseAddonFromUrl(url))
     of "github":
       let p = re"^(.+?/.+?)(?:/|$)(?:tree/)?(.+)?"
       var m: array[2, string]
@@ -78,10 +99,6 @@ proc addonFromUrl(url: string): Option[Addon] =
     of "gitlab":
       return some(newAddon(urlmatch[1], Gitlab))
     of "tukui":
-      # let p = re"^(download|addons)\.php\?(?:ui|id)=(.+)"
-      # var m: array[2, string]
-      # discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
-      # if m[0] == "download":
       return some(newAddon(urlmatch[1], Tukui))
     of "wowinterface":
       let p = re"^downloads\/info(\d+)-"
@@ -108,12 +125,7 @@ proc restoreAll(addons: seq[Addon]): seq[Addon] =
 proc setup(args: seq[string]) =
   if len(args) == 0:
     assert configData.mode != None
-    let mode = case configData.mode
-      of Retail: "retail"
-      of Classic: "classic"
-      of Vanilla: "vanilla"
-      of None: ""
-    
+    let mode = $configData.mode
     echo &"Mode: {mode}"
     echo &"Addons directory: {configData.installDir}"
     echo &"Backups enabled: {configData.backupEnabled}"
