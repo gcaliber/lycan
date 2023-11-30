@@ -1,1 +1,26 @@
-[]
+[
+  {
+    "project": "24608",
+    "name": "Hekili Priority Helper",
+    "kind": "Wowint",
+    "version": "v10.2.0-1.0.11-beta1",
+    "id": 2,
+    "pinned": false,
+    "dirs": [
+      "Hekili"
+    ],
+    "time": "2023-11-29T21:47"
+  },
+  {
+    "project": "82745",
+    "name": "Simulationcraft",
+    "kind": "Curse",
+    "version": "10.2.0-01",
+    "id": 1,
+    "pinned": false,
+    "dirs": [
+      "Simulationcraft"
+    ],
+    "time": "2023-11-29T22:13"
+  }
+]

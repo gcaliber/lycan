@@ -4,6 +4,7 @@ htmldocs/
 src/lycan
 src/lycan.exe
 test/_retail_/Interface/AddOns/*
+test/_retail_/WTF/*
 src/test*
 lycan_backup*
 lycan.cfg

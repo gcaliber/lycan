@@ -7,7 +7,6 @@
 
 # https://github.com/p3lim-wow/QuickQuest https://www.tukui.org/download.php?ui=elvui https://github.com/AdiAddons/AdiBags
 
-
 import std/algorithm
 import std/asyncdispatch
 import std/[json, jsonutils]
@@ -61,11 +60,12 @@ proc writeAddons(addons: var seq[Addon]) =
 
 proc curseAddonFromUrl(url: string): Future[Addon] {.async.} =
   var driver = newChromeDriver()
+  let agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36"
   var options = %*{
     "excludeSwitches": ["enable-automation", "enable-logging"],
-    "args": ["-window-size=1024,800"]
+    "args": ["-window-size=1024,800", &"--user-agent={agent}"]
   }
-  await driver.startSession(options, headless = false)
+  await driver.startSession(options, headless = true)
   await driver.setUrl(url & "/download")
 
   var element = await driver.waitElement(xPath, "/html/body/div/main/div[3]/div[1]/p/a")
