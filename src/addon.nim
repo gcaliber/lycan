@@ -60,41 +60,41 @@ proc stateMessage(addon: Addon) =
   case addon.state
   of Checking, Parsing:
     t.write(indent, addon.line, true, colors, style,
-      fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
+      fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
       fgYellow, &"{addon.prettyOldVersion()}", resetStyle)
   of Downloading, Installing, Restoring:
     t.write(indent, addon.line, true, colors, style,
-      fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
+      fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of FinishedUpdated, FinishedInstalled:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
+      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of FinishedAlreadyCurrent:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
+      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
       fgYellow, &"{addon.prettyVersion()}", resetStyle)
   of FinishedPinned:
     t.write(indent, addon.line, true, colors, style,
-      fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
+      fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
       styleBright, fgRed, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", 
       if addon.version != addon.oldVersion: fgGreen else: fgYellow,
       &"{addon.prettyVersion()}", resetStyle)
   of Removed, Pinned:
     t.write(indent, addon.line, true, colors, style,
-      fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
+      fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Unpinned:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
+      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Restored:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
+      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Failed, NoBackup:
     t.write(indent, addon.line, true, colors, style,
-      fgRed, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<32}",
+      fgRed, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
 
 proc setAddonState(addon: Addon, state: AddonState, err: string = "", sendMessage: bool = true) =
@@ -131,6 +131,8 @@ proc setName(addon: Addon, json: JsonNode, name: string = "none") =
     addon.name = json["name"].getStr()
   of Wowint:
     addon.name = json[0]["UIName"].getStr()
+  if addon.name.len > 34:
+    addon.name = addon.name[0 .. 33]
 
 proc setVersion(addon: Addon, json: JsonNode) =
   if addon.state == Failed: return
@@ -315,7 +317,7 @@ proc getBackupFiles(addon: Addon): seq[string] =
   return backups
 
 proc removeAddonFiles(addon: Addon, removeAllBackups: bool) =
-  addon.dirs.apply(d => removeDir(d))
+  addon.dirs.apply(d => removeDir(configData.installDir / d))
   var backups = getBackupFiles(addon)
   if removeAllBackups:
     backups.apply(removeFile)
@@ -435,7 +437,7 @@ proc unpin*(addon: Addon): Addon =
   addon.setAddonState(Unpinned)
   return addon
 
-proc list*(addon: Addon) =
+proc list*(addon: Addon, nameSpace: int, versionSpace: int) =
   let
     t = configData.term
     even = addon.line mod 2 == 0
@@ -447,11 +449,15 @@ proc list*(addon: Addon) =
     pin = if addon.pinned: "!" else: ""
     branch = if addon.branch.isSome: addon.branch.get() else: ""
     time = addon.time.format("MM/dd h:mm")
+    namePadding = ' '.repeat(nameSpace - addon.name.len)
+    versionPadding = ' '.repeat(versionSpace - addon.prettyVersion().len)
   t.write(1, addon.line, true, colors, style,
     fgBlue, &"{addon.id:<3}",
-    fgWhite, &"{addon.name:<32}",
+    fgWhite, &"{addon.name}",
+    namePadding,
     fgRed, pin,
-    fgGreen, &"{addon.prettyVersion():<24}",
+    fgGreen, &"{addon.prettyVersion()}",
+    versionPadding,
     fgCyan, &"{kind:<6}",
     fgWhite, if addon.branch.isSome: "@" else: "",
     fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}",

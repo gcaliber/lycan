@@ -3,8 +3,7 @@ nimblecache/
 htmldocs/
 src/lycan
 src/lycan.exe
-# test/addons*
-# test/_retail_*
+test/_retail_/Interface/AddOns/*
 src/test*
 lycan_backup*
 lycan.cfg

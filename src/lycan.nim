@@ -52,7 +52,6 @@ proc toJsonHook(a: Addon): JsonNode =
   result["time"] = %a.time.format("yyyy-MM-dd'T'HH:mm")
 
 proc writeAddons(addons: var seq[Addon]) =
-  if len(addons) == 0: return
   addons.sort((a, z) => int(a.name.toLower() > z.name.toLower()))
   let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
   let prettyJson = pretty(addonsJson)
@@ -250,13 +249,19 @@ of Unpin:
   processed = addons.map(unpin)
 of Restore:
   processed = addons.restoreAll()
-of List: 
-  addons.apply(list)
+of List:
+  if addons.len == 0:
+    quit()
+  let maxName = addons[addons.map(a => a.name.len).maxIndex()].name.len
+  let maxVersion = addons[addons.map(a => a.version.len).maxIndex()].version.len
+  for a in addons:
+    a.list(maxName + 2, maxVersion + 2)
   quit()
 of Help, Setup: discard
 
 rest = configData.addons.filter(addon => addon notin processed)
 final = if action != Remove: concat(processed, rest) else: rest
+
 writeAddons(final)
 writeConfig(configData)
 

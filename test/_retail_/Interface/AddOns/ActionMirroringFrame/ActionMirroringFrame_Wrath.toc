@@ -1,9 +1,0 @@
-## Interface: 30402
-## Title: ActionMirroringFrame
-## Notes: Shows up pressed keys and relative actions
-## Version: 0.1
-## Author: WobLight
-## SavedVariables: ActionMirroringFrameSettings
-## SavedVariablesPerCharacter: ActionMirroringFrameProfile
-## Dependencies: EmeraldFramework
-ActionMirroringFrame.lua
