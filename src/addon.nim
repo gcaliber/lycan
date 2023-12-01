@@ -15,6 +15,7 @@ import std/terminal
 import std/times
 
 import zippy/ziparchives
+import webdriver/chromedriver
 
 import config
 import types
@@ -105,26 +106,11 @@ proc setAddonState(addon: Addon, state: AddonState, err: string = "", sendMessag
   if sendMessage:
     addon.stateMessage()
 
-proc curseDataIndex(json: JsonNode): int =
-  var gameVersions: seq[string]
-  var match = case configData.mode
-    of Retail: "10."
-    of Vanilla: "1."
-    of Tbc: "2."
-    of Wrath: "3."
-    of None: ""
-  for i, data in enumerate(json["data"]):
-    gameVersions.fromJson(data["gameVersions"])
-    for num in gameVersions:
-      if num.startsWith(match):
-        return i
-  return -1
-
 proc setName(addon: Addon, json: JsonNode, name: string = "none") =
   if addon.state == Failed: return
   case addon.kind
   of Curse:
-    discard
+    addon.name = json["fileName"].getStr().split('-')[0]
   of Github, GithubRepo, Gitlab:
     addon.name = addon.project.split('/')[^1]
   of Tukui:
@@ -139,8 +125,7 @@ proc setVersion(addon: Addon, json: JsonNode) =
   addon.old_version = addon.version
   case addon.kind
   of Curse:
-    let index = curseDataIndex(json)
-    addon.version = json["data"][index]["displayName"].getStr()
+    addon.version = json["displayName"].getStr()
   of Github:
     let v = json["tag_name"].getStr()
     addon.version = if v != "": v else: json["name"].getStr()
@@ -160,8 +145,6 @@ proc getInvalidModeStrings(mode: Mode): seq[string] =
     result = @["bcc", "tbc", "wotlk", "wotlkc", "wrath", "classic"]
   of Vanilla:
     result = @["mainline", "bcc", "tbc", "wotlk", "wotlkc", "wrath"]
-  of Tbc:
-    result = @["mainline", "wotlk", "wotlkc", "wrath"]
   of Wrath:
     result = @["mainline", "bcc", "tbc", "classic"]
   of None:
@@ -171,10 +154,7 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) =
   if addon.state == Failed: return
   case addon.kind
   of Curse:
-    let index = curseDataIndex(json)
-    if index == -1:
-      addon.setAddonState(Failed, "Unable to find download.")
-    let id = $json["data"][index]["id"].getInt()
+    let id = $json["id"].getInt()
     addon.downloadUrl = &"https://www.curseforge.com/api/v1/mods/{addon.project}/files/{id}/download"
   of Github:
     let assets = json["assets"]
@@ -203,19 +183,19 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) =
 
 proc getLatestUrl(addon: Addon): string =
   case addon.kind
-    of Curse:
-      return &"https://www.curseforge.com/api/v1/mods/{addon.project}/files"
-    of Github:
-      return &"https://api.github.com/repos/{addon.project}/releases/latest"
-    of Gitlab:
-      let urlEncodedProject = addon.project.replace("/", "%2F")
-      return &"https://gitlab.com/api/v4/projects/{urlEncodedProject}/releases"
-    of Tukui:
-      return "https://api.tukui.org/v1/addons/"
-    of Wowint:
-      return &"https://api.mmoui.com/v3/game/WOW/filedetails/{addon.project}.json"
-    of GithubRepo:
-      return &"https://api.github.com/repos/{addon.project}/commits/{addon.branch.get()}"
+  of Curse:
+    return &"https://www.curseforge.com/api/v1/mods/{addon.project}/files"
+  of Github:
+    return &"https://api.github.com/repos/{addon.project}/releases/latest"
+  of Gitlab:
+    let urlEncodedProject = addon.project.replace("/", "%2F")
+    return &"https://gitlab.com/api/v4/projects/{urlEncodedProject}/releases"
+  of Tukui:
+    return "https://api.tukui.org/v1/addons/"
+  of Wowint:
+    return &"https://api.mmoui.com/v3/game/WOW/filedetails/{addon.project}.json"
+  of GithubRepo:
+    return &"https://api.github.com/repos/{addon.project}/commits/{addon.branch.get()}"
 
 
 proc getLatest(addon: Addon): Future[AsyncResponse] {.async.} =
@@ -253,8 +233,7 @@ proc download(addon: Addon, json: JsonNode) {.async.} =
   var downloadName: string
   case addon.kind:
   of Curse:
-    let index = curseDataIndex(json)
-    downloadName = json["data"][index]["fileName"].getStr()
+    downloadName = json["fileName"].getStr()
   else:
     try:
       downloadName = response.headers["content-disposition"].split('=')[1].strip(chars = {'\'', '"'})
@@ -368,6 +347,29 @@ proc unzip(addon: Addon) =
   except CatchableError as e:
     addon.setAddonState(Failed, e.msg)
 
+proc curseGetProject(addon: Addon) {.async.} =
+  try:
+    var driver = newChromeDriver()
+    let agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36"
+    var options = %*{
+      "excludeSwitches": ["enable-automation", "enable-logging"],
+      "args": ["-window-size=1024,800", &"--user-agent={agent}"]
+    }
+    await driver.startSession(options, headless = true)
+    await driver.setUrl(addon.project & "/download")
+
+    var element = await driver.waitElement(xPath, "/html/body/div/main/div[3]/div[1]/p/a")
+    let href = await driver.getElementAttribute(element, "href")
+    var match: array[1, string]
+    let pattern = re"\/mods\/(\d+)\/"
+    discard find(cstring(href), pattern, match, 0, len(href))
+    addon.project = match[0]
+
+    await driver.deleteSession()
+    await driver.close()
+  except:
+    addon.setAddonState(Failed, &"TODO: Fix exceptions for chromedriver errors")
+
 proc getLatestJson(addon: Addon): Future[JsonNode] {.async.} =
   var json: JsonNode
   let futureResponse = addon.getLatest()
@@ -385,16 +387,34 @@ proc getLatestJson(addon: Addon): Future[JsonNode] {.async.} =
     addon.setAddonState(Failed, &"Failed to download json: {addon.getLatestUrl()}")
     return
   json = parseJson(futureBody.read())
-  if addon.kind == Tukui:
-    for node in json:
-      if node["slug"].getStr() == addon.project:
-        return node
-    addon.setAddonState(Failed, "Addon not found in json")
+  case addon.kind:
+  of Curse:
+    var gameVersions: seq[string]
+    var gameVersionNumber = case configData.mode
+    of Retail: "10."
+    of Vanilla: "1."
+    of Wrath: "3."
+    of None: ""
+    for i, data in enumerate(json["data"]):
+      gameVersions.fromJson(data["gameVersions"])
+      for num in gameVersions:
+        if num.startsWith(gameVersionNumber):
+          return json["data"][i]
+    addon.setAddonState(Failed, "Addon for current game mode not found.")
+  of Tukui:
+    for data in json:
+      if data["slug"].getStr() == addon.project:
+        return data
+    addon.setAddonState(Failed, "Addon not found in json.")
     return
+  else:
+    discard
   return json
 
 proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
   addon.setAddonState(Checking)
+  if addon.kind == Curse and addon.project.startsWith("https://"):
+    await addon.curseGetProject()
   let json = await addon.getLatestJson()
   addon.setAddonState(Parsing)
   addon.setVersion(json)
@@ -449,15 +469,11 @@ proc list*(addon: Addon, nameSpace: int, versionSpace: int) =
     pin = if addon.pinned: "!" else: ""
     branch = if addon.branch.isSome: addon.branch.get() else: ""
     time = addon.time.format("MM/dd h:mm")
-    namePadding = ' '.repeat(nameSpace - addon.name.len)
-    versionPadding = ' '.repeat(versionSpace - addon.prettyVersion().len)
   t.write(1, addon.line, true, colors, style,
     fgBlue, &"{addon.id:<3}",
-    fgWhite, &"{addon.name}",
-    namePadding,
+    fgWhite, &"{addon.name.alignLeft(nameSpace)}",
     fgRed, pin,
-    fgGreen, &"{addon.prettyVersion()}",
-    versionPadding,
+    fgGreen, &"{addon.prettyVersion().alignLeft(versionSpace)}",
     fgCyan, &"{kind:<6}",
     fgWhite, if addon.branch.isSome: "@" else: "",
     fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}",

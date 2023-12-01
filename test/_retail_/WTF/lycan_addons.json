@@ -3,24 +3,24 @@
     "project": "24608",
     "name": "Hekili Priority Helper",
     "kind": "Wowint",
-    "version": "v10.2.0-1.0.11-beta1",
+    "version": "v10.2.0-1.0.11",
     "id": 2,
     "pinned": false,
     "dirs": [
       "Hekili"
     ],
-    "time": "2023-11-29T21:47"
+    "time": "2023-12-01T15:55"
   },
   {
-    "project": "82745",
-    "name": "Simulationcraft",
+    "project": "91970",
+    "name": "MaxDps",
     "kind": "Curse",
-    "version": "10.2.0-01",
+    "version": "v10.0.10",
     "id": 1,
     "pinned": false,
     "dirs": [
-      "Simulationcraft"
+      "MaxDps"
     ],
-    "time": "2023-11-29T22:13"
+    "time": "2023-12-01T15:55"
   }
 ]

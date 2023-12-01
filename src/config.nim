@@ -7,6 +7,8 @@ import std/times
 import types
 import term
 
+var configData*: Config
+
 proc fromJsonHook(a: var Addon, j: JsonNode) =
   var
     b: Option[string]
@@ -41,10 +43,7 @@ proc parseInstalledAddons(filename: string): seq[Addon] =
     result.add(a)
 
 proc getWowDir(mode: Mode): string =
-  when not defined(release):
-    createDir("/home/mike/projects/lycan/test/_retail_/Interface/AddOns")
-    createDir("/home/mike/projects/lycan/test/_retail_/WTF")
-    return "/home/mike/projects/lycan/test/"
+  echo &"No configuration found. Searching for World of Warcraft install location for mode: {$mode}"
   var root = getHomeDir()
   when defined(windows):
     let default = joinPath("C:", "Program Files (x86)", "World of Warcraft")
@@ -61,13 +60,16 @@ proc getWowDir(mode: Mode): string =
         return wow
       else:
         echo &"Found WoW directory: {wow}"
-        echo "No AddOns directory was found. Make sure you have started WoW at least once to create this directory."
+        echo "No AddOns directory was found. Make sure you have started WoW at least once."
         echo "If this location is incorrect you can set it manually with"
         echo "  lycan --config path <path/to/World of Warcraft>\n"
         quit()
   echo "Unable to determine the World of Warcraft install location."
   echo "Set the location manually with"
   echo "  lycan --config path <path/to/World of Warcraft>\n"
+  echo "Change modes with"
+  echo "  lycan --config path <mode>"
+  echo "For supported modes see lycan --help"
   quit()
 
 let 
@@ -86,14 +88,15 @@ proc writeConfig*(config: Config) =
   j[mode]["backupEnabled"] = %config.backupEnabled
   j[mode]["backupDir"] = %config.backupDir
   
-
   let prettyJson = pretty(j)
   let path = if config.local: localPath else: configPath
+  if not dirExists(path.parentDir()):
+    createDir(path.parentDir())
   let file = open(path, fmWrite)
   write(file, prettyJson)
   close(file)
 
-proc loadConfig(default: Mode = None): Config =
+proc loadConfig*(default: Mode = None): Config =
   var 
     configJson: JsonNode
     local = false
@@ -161,9 +164,6 @@ proc loadConfig(default: Mode = None): Config =
   result.local = local
   result.addons = parseInstalledAddons(addonJsonFile)
     
-var configData* = loadConfig()
-
-
 proc setPath*(path: string) =
   if not dirExists(path):
     echo &"Error: Path provided does not exist:\n  {path}"
@@ -181,10 +181,8 @@ proc setMode*(mode: string) =
   case mode.toLower()
   of "retail", "r":
     configData.mode = Retail
-  of "wrath", "wrathc", "wotlk", "wotlkc", "w":
+  of "classic", "wrath", "wrathc", "wotlk", "wotlkc", "w":
     configData.mode = Wrath
-  of "tbc", "bcc", "t":
-    configData.mode = Tbc
   of "vanilla", "v":
     configData.mode = Vanilla
   else:

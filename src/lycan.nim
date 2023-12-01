@@ -19,8 +19,6 @@ import std/sugar
 import std/terminal
 import std/times
 
-import webdriver/chromedriver
-
 import addon
 import config
 import help
@@ -58,27 +56,6 @@ proc writeAddons(addons: var seq[Addon]) =
   write(file, prettyJson)
   close(file)
 
-proc curseAddonFromUrl(url: string): Future[Addon] {.async.} =
-  var driver = newChromeDriver()
-  let agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36"
-  var options = %*{
-    "excludeSwitches": ["enable-automation", "enable-logging"],
-    "args": ["-window-size=1024,800", &"--user-agent={agent}"]
-  }
-  await driver.startSession(options, headless = true)
-  await driver.setUrl(url & "/download")
-
-  var element = await driver.waitElement(xPath, "/html/body/div/main/div[3]/div[1]/p/a")
-  let api = await driver.getElementAttribute(element, "href")
-  var match: array[1, string]
-  let pattern = re"\/mods\/(\d+)\/"
-  discard find(cstring(api), pattern, match, 0, len(api))
-
-  element = await driver.waitElement(xPath, "/html/body/div/main/div[4]/div/h1")
-  let name = await driver.getElementText(element)
-  result = newAddon(match[0], Curse, name = name)
-  await driver.close()
-
 proc addonFromUrl(url: string): Option[Addon] =
   var urlmatch: array[2, string]
   let pattern = re"^(?:https?://)?(?:www\.)?(.+)\.(?:com|org)/(.+[^/\n])"
@@ -87,7 +64,7 @@ proc addonFromUrl(url: string): Option[Addon] =
     return none(Addon)
   case urlmatch[0].toLower()
     of "curseforge":
-      return some(waitFor curseAddonFromUrl(url))
+      return some(newAddon(url, Curse))
     of "github":
       let p = re"^(.+?/.+?)(?:/|$)(?:tree/)?(.+)?"
       var m: array[2, string]
@@ -153,120 +130,143 @@ proc setup(args: seq[string]) =
   writeConfig(configData)
   quit()
 
-var opt = initOptParser(
-  commandLineParams(), 
-  shortNoVal = {'u', 'i', 'a'}, 
-  longNoVal = @["update"]
-)
-var
-  action = Empty
-  actionCount = 0
-  args: seq[string]
-for kind, key, val in opt.getopt():
-  case kind
-  of cmdShortOption, cmdLongOption:
-    if val == "":
-      case key:
-      of "a", "i":          action = Install; actionCount += 1
-      of "u":               action = Update;  actionCount += 1
-      of "r":               action = Remove;  actionCount += 1
-      of "l", "list":       action = List;    actionCount += 1
-      of "c", "config":     action = Setup;   actionCount += 1
-      else: displayHelp()
+
+
+
+
+
+
+
+
+
+proc main() =
+  var opt = initOptParser(
+    commandLineParams(), 
+    shortNoVal = {'u', 'i', 'a'}, 
+    longNoVal = @["update"]
+  )
+  var
+    action = Empty
+    actionCount = 0
+    args: seq[string]
+  for kind, key, val in opt.getopt():
+    case kind
+    of cmdShortOption, cmdLongOption:
+      if val == "":
+        case key:
+        of "a", "i":          action = Install; actionCount += 1
+        of "u":               action = Update;  actionCount += 1
+        of "r":               action = Remove;  actionCount += 1
+        of "l", "list":       action = List;    actionCount += 1
+        of "c", "config":     action = Setup;   actionCount += 1
+        of "h", "help":       action = Help;    actionCount += 1
+        else: displayHelp()
+      else:
+        args.add(val)
+        case key:
+        of "add", "install":  action = Install; actionCount += 1
+        of "update":          action = Update;  actionCount += 1
+        of "r", "remove":     action = Remove;  actionCount += 1
+        of "l", "list":       action = List;    actionCount += 1
+        of "pin":             action = Pin;     actionCount += 1
+        of "unpin":           action = Unpin;   actionCount += 1
+        of "restore":         action = Restore; actionCount += 1
+        of "c", "config":     action = Setup;   actionCount += 1
+        of "help":            action = Help;    actionCount += 1
+        else: displayHelp()
+    of cmdArgument:
+      args.add(key)
     else:
-      args.add(val)
-      case key:
-      of "add", "install":  action = Install; actionCount += 1
-      of "update":          action = Update;  actionCount += 1
-      of "r", "remove":     action = Remove;  actionCount += 1
-      of "l", "list":       action = List;    actionCount += 1
-      of "pin":             action = Pin;     actionCount += 1
-      of "unpin":           action = Unpin;   actionCount += 1
-      of "restore":         action = Restore; actionCount += 1
-      of "c", "config":     action = Setup;   actionCount += 1
-      of "help":            action = Help;    actionCount += 1
-      else: displayHelp()
-  of cmdArgument:
-    args.add(key)
-  else:
-    displayHelp()
-  if actionCount > 1 or (len(args) > 0 and action == Empty):
-    displayHelp()
+      displayHelp()
+    if actionCount > 1 or (len(args) > 0 and action == Empty):
+      displayHelp()
 
-var 
-  addons: seq[Addon]
-  line = 0
-  ids: seq[int16]
-case action
-of Install:
-  for arg in args:
-    var addon = addonFromUrl(arg)
-    if addon.isSome:
-      var a = addon.get()
-      a.line = line
-      addons.add(a)
-      line += 1
-of Update, Empty:
-  for addon in configData.addons:
-    addon.line = line
-    addons.add(addon)
-    line += 1
-of Remove, Restore, Pin, Unpin:
-  for arg in args:
-    try:
-      ids.add(int16(arg.parseInt()))
-    except:
-      continue
-  for id in ids:
-    var addon = addonFromId(id)
-    if addon.isSome:
-      var a = addon.get()
-      a.line = line
-      addons.add(a)
-      line += 1
-of List:
-  addons = configData.addons
-  if "t" in args or "time" in args:
-    addons.sort((a, z) => int(a.time < z.time))
-  for addon in addons:
-    addon.line = line
-    line += 1
-of Setup:
-  setup(args)
-of Help:
-  displayHelp(args[0])
+  case action
+  of Setup, Help:
+    discard
+  else: 
+    configData = loadConfig()
 
-var processed, rest, final: seq[Addon]
-case action
-of Install, Update, Empty:
-  processed = waitFor addons.installAll()
-  assignIds(processed.concat(configData.addons))
-of Remove:
-  processed = addons.map(uninstall)
-of Pin:
-  processed = addons.map(pin)
-of Unpin:
-  processed = addons.map(unpin)
-of Restore:
-  processed = addons.restoreAll()
-of List:
-  if addons.len == 0:
+  var 
+    addons: seq[Addon]
+    line = 0
+    ids: seq[int16]
+  case action
+  of Install:
+    for arg in args:
+      var addon = addonFromUrl(arg)
+      if addon.isSome:
+        var a = addon.get()
+        a.line = line
+        addons.add(a)
+        line += 1
+  of Update, Empty:
+    for addon in configData.addons:
+      addon.line = line
+      addons.add(addon)
+      line += 1
+  of Remove, Restore, Pin, Unpin:
+    for arg in args:
+      try:
+        ids.add(int16(arg.parseInt()))
+      except:
+        continue
+    for id in ids:
+      var addon = addonFromId(id)
+      if addon.isSome:
+        var a = addon.get()
+        a.line = line
+        addons.add(a)
+        line += 1
+  of List:
+    addons = configData.addons
+    if "t" in args or "time" in args:
+      addons.sort((a, z) => int(a.time < z.time))
+    for addon in addons:
+      addon.line = line
+      line += 1
+  of Setup:
+    setup(args)
+  of Help:
+    if args.len > 0:
+      displayHelp(args[0])
+    else:
+      displayHelp()
+
+  var processed, rest, final: seq[Addon]
+  case action
+  of Install, Update, Empty:
+    processed = waitFor addons.installAll()
+    assignIds(processed.concat(configData.addons))
+  of Remove:
+    processed = addons.map(uninstall)
+  of Pin:
+    processed = addons.map(pin)
+  of Unpin:
+    processed = addons.map(unpin)
+  of Restore:
+    processed = addons.restoreAll()
+  of List:
+    if addons.len == 0:
+      quit()
+    let maxName = addons[addons.map(a => a.name.len).maxIndex()].name.len
+    let maxVersion = addons[addons.map(a => a.version.len).maxIndex()].version.len
+    for a in addons:
+      a.list(maxName + 2, maxVersion + 2)
     quit()
-  let maxName = addons[addons.map(a => a.name.len).maxIndex()].name.len
-  let maxVersion = addons[addons.map(a => a.version.len).maxIndex()].version.len
-  for a in addons:
-    a.list(maxName + 2, maxVersion + 2)
-  quit()
-of Help, Setup: discard
+  of Help, Setup: discard
 
-rest = configData.addons.filter(addon => addon notin processed)
-final = if action != Remove: concat(processed, rest) else: rest
+  rest = configData.addons.filter(addon => addon notin processed)
+  final = if action != Remove: concat(processed, rest) else: rest
 
-writeAddons(final)
-writeConfig(configData)
+  writeAddons(final)
+  writeConfig(configData)
 
-let t = configData.term
-t.write(0, t.yMax, false, "\n")
-for item in configData.log:
-  t.write(0, t.yMax, false, fgRed, &"\nError: ", fgCyan, item.addon.getName, "\n", resetStyle)
-  t.write(4, t.yMax, false, fgDefault, item.msg, "\n", resetStyle)
+  let t = configData.term
+  if configData.log.len > 0:
+    t.write(0, t.yMax, false, "\n")
+  for item in configData.log:
+    t.write(0, t.yMax, false, fgRed, &"\nError: ", fgCyan, item.addon.getName, "\n", resetStyle)
+    t.write(4, t.yMax, false, fgDefault, item.msg, "\n", resetStyle)
+
+main()

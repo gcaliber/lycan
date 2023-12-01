@@ -1,10 +1,9 @@
 import std/terminal
 
-import config
 import term
 
 proc displayHelp*(option: string = "") =
-  let t = configData.term
+  let t = termInit()
 
   t.write(6, t.yMax, false, fgGreen, "Lycan", fgYellow, " 0.1.0", fgDefault, " by inverimus\n", resetStyle)
   

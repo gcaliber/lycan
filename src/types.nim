@@ -8,9 +8,8 @@ type
 
   Mode* = enum
     Retail = "retail",
-    Vanilla = "classic_vanilla",
-    Tbc = "classic_tbc",
-    Wrath = "classic_wrath"
+    Vanilla = "classic_era",
+    Wrath = "classic"
     None = "",
 
   AddonState* = enum
