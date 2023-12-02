@@ -205,7 +205,7 @@ proc setMode*(mode: string) =
     configData.mode = Retail
   of "classic", "wrath", "wrathc", "wotlk", "wotlkc", "w":
     configData.mode = Wrath
-  of "vanilla", "v":
+  of "classic_era", "vanilla", "v":
     configData.mode = Vanilla
   else:
     echo "Valid modes are"
