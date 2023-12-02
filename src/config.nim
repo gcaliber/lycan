@@ -42,6 +42,9 @@ proc parseInstalledAddons(filename: string): seq[Addon] =
     a.fromJson(addon)
     result.add(a)
 
+proc dir(mode: Mode): string =
+  return '_' & $mode & '_'
+
 proc getWowDir(mode: Mode): string =
   echo &"No configuration found. Searching for World of Warcraft install location for mode: {$mode}"
   var root = getHomeDir()
@@ -51,7 +54,7 @@ proc getWowDir(mode: Mode): string =
       return default
     root = "C:"
   for path in walkDirRec(root, yieldFilter = {pcDir}):
-    let dir = '_' & $mode & '_'
+    let dir = mode.dir()
     if path.contains("World of Warcraft" / dir):
       var wow = path
       while not wow.endsWith("World of Warcraft"):
@@ -78,23 +81,19 @@ let
   configPath: string = joinPath(getConfigDir(), "lycan", lycanConfigFile)
 
 proc writeConfig*(config: Config) =
-  let j = newJObject()
+  let json = newJObject()
   let mode = $config.mode
-  j["mode"] = %config.mode
-  j["githubToken"] = %config.githubToken
-  j[mode] = newJObject()
-  j[mode]["addonJsonFile"] = %config.addonJsonFile
-  j[mode]["installDir"] = %config.installDir
-  j[mode]["backupEnabled"] = %config.backupEnabled
-  j[mode]["backupDir"] = %config.backupDir
-  
-  let prettyJson = pretty(j)
-  let path = if config.local: localPath else: configPath
+  json["mode"] = %config.mode
+  json["githubToken"] = %config.githubToken
+  json[mode] = newJObject()
+  json[mode]["addonJsonFile"] = %config.addonJsonFile
+  json[mode]["installDir"] = %config.installDir
+  json[mode]["backupEnabled"] = %config.backupEnabled
+  json[mode]["backupDir"] = %config.backupDir
+  let path = if fileExists(localPath): localPath else: configPath
   if not dirExists(path.parentDir()):
     createDir(path.parentDir())
-  let file = open(path, fmWrite)
-  write(file, prettyJson)
-  close(file)
+  writeFile(path, pretty(json))
 
 proc loadConfig*(default: Mode = None): Config =
   var 
@@ -168,7 +167,7 @@ proc setPath*(path: string) =
   if not dirExists(path):
     echo &"Error: Path provided does not exist:\n  {path}"
     quit()
-  let mode = $configData.mode
+  let mode = configData.mode.dir()
   configData.installDir = joinPath(path, mode, "Interface", "AddOns")
   if not dirExists(configdata.installDir):
     echo &"Error: Did not find {configdata.installDir}"
