@@ -3,9 +3,9 @@
 # https://gitlab.com/woblight/actionmirroringframe
 # https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
 
-# https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/woblight/actionmirroringframe https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
+# https://www.tukui.org/elvui https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/woblight/actionmirroringframe https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
 
-# https://github.com/p3lim-wow/QuickQuest https://www.tukui.org/download.php?ui=elvui https://github.com/AdiAddons/AdiBags
+# https://github.com/p3lim-wow/QuickQuest https://www.tukui.org/elvui https://github.com/AdiAddons/AdiBags
 
 import std/algorithm
 import std/asyncdispatch
@@ -51,10 +51,8 @@ proc toJsonHook(a: Addon): JsonNode =
 proc writeAddons(addons: var seq[Addon]) =
   addons.sort((a, z) => int(a.name.toLower() > z.name.toLower()))
   let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
-  let prettyJson = pretty(addonsJson)
-  let file = open(configData.addonJsonFile, fmWrite)
-  write(file, prettyJson)
-  close(file)
+  if configData.addonJsonFile != "":
+    writeFile(configData.addonJsonFile, pretty(addonsJson))
 
 proc addonFromUrl(url: string): Option[Addon] =
   var urlmatch: array[2, string]
@@ -176,7 +174,7 @@ proc main() =
       displayHelp()
 
   case action
-  of Setup, Help:
+  of Help, Setup:
     discard
   else:
     configData = loadConfig()

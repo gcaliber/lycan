@@ -62,18 +62,18 @@ proc getWowDir(mode: Mode): string =
       if dirExists(joinPath(wow, dir, "Interface", "AddOns")):
         return wow
       else:
-        echo &"Found WoW directory: {wow}"
+        echo &"Found WoW install location: {wow}"
         echo "No AddOns directory was found. Make sure you have started WoW at least once."
-        echo "If this location is incorrect you can set it manually with"
+        echo "If this location is incorrect you can set it manually:"
         echo "  lycan --config path <path/to/World of Warcraft>\n"
-        quit()
+        return ""
   echo "Unable to determine the World of Warcraft install location."
-  echo "Set the location manually with"
+  echo "Set the location manually:"
   echo "  lycan --config path <path/to/World of Warcraft>\n"
-  echo "Change modes with"
-  echo "  lycan --config path <mode>"
+  echo "Change modes:"
+  echo "  lycan --config mode <mode>\n"
   echo "For supported modes see lycan --help"
-  quit()
+  return ""
 
 let 
   lycanConfigFile: string = "lycan.cfg"
@@ -82,20 +82,36 @@ let
 
 proc writeConfig*(config: Config) =
   let json = newJObject()
-  let mode = $config.mode
   json["mode"] = %config.mode
   json["githubToken"] = %config.githubToken
-  json[mode] = newJObject()
-  json[mode]["addonJsonFile"] = %config.addonJsonFile
-  json[mode]["installDir"] = %config.installDir
-  json[mode]["backupEnabled"] = %config.backupEnabled
-  json[mode]["backupDir"] = %config.backupDir
   let path = if fileExists(localPath): localPath else: configPath
+  let file = readFile(path)
+  var existingConfig: JsonNode
+  try:
+    existingConfig = parseJson(file)
+  except JsonParsingError:
+    existingConfig = newJObject()
+  for mode in [Retail, Vanilla, Wrath]:
+    if mode == config.mode:
+      json[$mode] = newJObject()
+      json[$mode]["addonJsonFile"] = %config.addonJsonFile
+      json[$mode]["installDir"] = %config.installDir
+      json[$mode]["backupEnabled"] = %config.backupEnabled
+      json[$mode]["backupDir"] = %config.backupDir
+    else:
+      try:
+        json[$mode] = existingConfig[$mode]
+      except KeyError:
+        json[$mode] = newJObject()
+        json[$mode]["addonJsonFile"] = %""
+        json[$mode]["installDir"] = %""
+        json[$mode]["backupEnabled"] = %true
+        json[$mode]["backupDir"] = %""
   if not dirExists(path.parentDir()):
     createDir(path.parentDir())
   writeFile(path, pretty(json))
 
-proc loadConfig*(default: Mode = None): Config =
+proc loadConfig*(newMode: Mode = None, newPath: string = ""): Config =
   var 
     configJson: JsonNode
     local = false
@@ -119,22 +135,24 @@ proc loadConfig*(default: Mode = None): Config =
       echo e.msg
       quit()
 
-  var 
+  var
     mode: Mode
     settings: JsonNode
     modeExists = true
   result = Config()
   if not configJson.isNil:
     try:
-      if default == None:
+      if newMode == None:
         mode.fromJson(configJson["mode"])
       else:
-        mode = default
+        mode = newMode
       settings = configJson[$mode]
+      if settings["addonJsonFile"].getStr() == "":
+        modeExists = false
     except KeyError:
       modeExists = false
   else:
-    mode = if default == None: Retail else: default
+    mode = if newMode == None: Retail else: newMode
     modeExists = false
   
   var addonJsonFile: string
@@ -145,13 +163,18 @@ proc loadConfig*(default: Mode = None): Config =
     result.backupEnabled = settings["backupEnabled"].getBool()
     result.backupDir = settings["backupDir"].getStr()
   else:
-    let wow = getWowDir(mode)
-    let dir = '_' & $mode & '_'
-    addonJsonFile = joinPath(wow, dir, "WTF", "lycan_addons.json")
-    result.installDir = joinPath(wow, dir, "Interface", "AddOns")
-    result.addonJsonFile = addonJsonFile
+    var wow: string
+    if newPath == "":
+      wow = getWowDir(mode)
+    else:
+      wow = newPath
     result.backupEnabled = true
-    result.backupDir = joinPath(wow, dir, "Interface", "lycan_backup")
+    if wow != "":
+      let dir = mode.dir()
+      addonJsonFile = joinPath(wow, dir, "WTF", "lycan_addons.json")
+      result.installDir = joinPath(wow, dir, "Interface", "AddOns")
+      result.addonJsonFile = addonJsonFile
+      result.backupDir = joinPath(wow, dir, "Interface", "lycan_backup")
 
   try:
     result.githubToken = configJson["githubToken"].getStr()
@@ -161,20 +184,20 @@ proc loadConfig*(default: Mode = None): Config =
   result.tempDir = getTempDir()
   result.term = termInit()
   result.local = local
-  result.addons = parseInstalledAddons(addonJsonFile)
-    
+  if addonJsonFile != "":
+    result.addons = parseInstalledAddons(addonJsonFile)
+
 proc setPath*(path: string) =
   if not dirExists(path):
     echo &"Error: Path provided does not exist:\n  {path}"
     quit()
   let mode = configData.mode.dir()
-  configData.installDir = joinPath(path, mode, "Interface", "AddOns")
-  if not dirExists(configdata.installDir):
-    echo &"Error: Did not find {configdata.installDir}"
-    echo "Make sure you are in the correct mode (retail, wotlk, etc) and that World of Warcraft has been started at least once."
+  let installDir = joinPath(path, mode, "Interface", "AddOns")
+  if not dirExists(installDir):
+    echo &"Error: Did not find {installDir}"
+    echo "Make sure you are in the correct mode and that World of Warcraft has been started at least once."
     quit()
-  configData.addonJsonFile = joinPath(path, mode, "WTF", "lycan_addons.json")
-  configData.backupDir = joinPath(path, mode, "Interface", "lycan_backup")
+  configData = loadConfig(newPath = path)
 
 proc setMode*(mode: string) =
   case mode.toLower()
@@ -186,14 +209,13 @@ proc setMode*(mode: string) =
     configData.mode = Vanilla
   else:
     echo "Valid modes are"
-    echo "  retail    Most recent retail expansion"
-    echo "  tbc       The Burning Crusade Classic"
-    echo "  wrath     Wrath of the Lich King Classic"
-    echo "  vanilla   Vanilla era Classic"
-    echo "These can be shortened to their first letter as well."
+    echo "  retail, r    Most recent retail expansion"
+    echo "  wrath, w     Wrath of the Lich King Classic"
+    echo "  vanilla, v   Vanilla era Classic"
   configData = loadConfig(configData.mode)
 
 proc setBackup*(arg: string) =
+  configData = loadConfig()
   case arg.toLower()
   of "y", "yes", "on", "enable", "enabled", "true":
     configData.backupEnabled = true
@@ -203,6 +225,7 @@ proc setBackup*(arg: string) =
     if not dirExists(arg):
       echo &"Error: Path provided does not exist:\n  {arg}"
       quit()
+    configData = loadConfig()
     for kind, path in walkDir(configData.backupDir):
       if kind == pcFile:
         moveFile(path, arg / lastPathPart(path))
