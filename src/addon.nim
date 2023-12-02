@@ -412,6 +412,8 @@ proc getLatestJson(addon: Addon): Future[JsonNode] {.async.} =
   return json
 
 proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
+  # let t = configData.term # this causes it not to crash, no clue why
+  # t.write(0, t.yMax, false, "\n")
   addon.setAddonState(Checking)
   if addon.kind == Curse and addon.project.startsWith("https://"):
     await addon.curseGetProject()
@@ -439,6 +441,7 @@ proc install*(addon: Addon): Future[Option[Addon]] {.async.} =
       return none(Addon)
     return some(addon)
   else:
+    # t.write(0, t.yMax, false, &"Completed {addon.name}", resetStyle)
     addon.setAddonState(FinishedAlreadyCurrent)
     return none(Addon)
 

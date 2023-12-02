@@ -133,12 +133,6 @@ proc setup(args: seq[string]) =
 
 
 
-
-
-
-
-
-
 proc main() =
   var opt = initOptParser(
     commandLineParams(), 
@@ -184,10 +178,10 @@ proc main() =
   case action
   of Setup, Help:
     discard
-  else: 
+  else:
     configData = loadConfig()
 
-  var 
+  var
     addons: seq[Addon]
     line = 0
     ids: seq[int16]
