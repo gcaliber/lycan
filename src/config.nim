@@ -219,13 +219,14 @@ proc setBackup*(arg: string) =
   of "n", "no", "off", "disable", "disabled", "false":
     configData.backupEnabled = false
   else:
-    if not dirExists(arg):
-      echo &"Error: Path provided does not exist:\n  {arg}"
+    let dir = normalizePathEnd(arg)
+    if not dirExists(dir):
+      echo &"Error: Path provided does not exist:\n  {dir}"
       quit()
     configData = loadConfig()
     for kind, path in walkDir(configData.backupDir):
       if kind == pcFile:
         moveFile(path, arg / lastPathPart(path))
     configData.backupDir = arg
-    echo "Backup directory now ", arg
+    echo "Backup directory now ", dir
     echo "Existing backup files have been moved."
