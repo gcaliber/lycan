@@ -163,11 +163,7 @@ proc loadConfig*(newMode: Mode = None, newPath: string = ""): Config =
     result.backupEnabled = settings["backupEnabled"].getBool()
     result.backupDir = settings["backupDir"].getStr()
   else:
-    var wow: string
-    if newPath == "":
-      wow = getWowDir(mode)
-    else:
-      wow = newPath
+    var wow = if newPath == "": getWowDir(mode) else: newPath
     result.backupEnabled = true
     if wow != "":
       let dir = mode.dir()
@@ -188,16 +184,17 @@ proc loadConfig*(newMode: Mode = None, newPath: string = ""): Config =
     result.addons = parseInstalledAddons(addonJsonFile)
 
 proc setPath*(path: string) =
-  if not dirExists(path):
-    echo &"Error: Path provided does not exist:\n  {path}"
+  let normalPath = path.normalizePathEnd()
+  if not dirExists(normalPath):
+    echo &"Error: Path provided does not exist:\n  {normalPath}"
     quit()
   let mode = configData.mode.dir()
-  let installDir = joinPath(path, mode, "Interface", "AddOns")
+  let installDir = joinPath(normalPath, mode, "Interface", "AddOns")
   if not dirExists(installDir):
     echo &"Error: Did not find {installDir}"
     echo "Make sure you are in the correct mode and that World of Warcraft has been started at least once."
     quit()
-  configData = loadConfig(newPath = path)
+  configData = loadConfig(newPath = normalPath)
 
 proc setMode*(mode: string) =
   case mode.toLower()
