@@ -9,6 +9,7 @@
 
 import std/algorithm
 import std/asyncdispatch
+import std/enumerate
 import std/[json, jsonutils]
 import std/options
 import std/[os, parseopt]
@@ -19,11 +20,14 @@ import std/sugar
 import std/terminal
 import std/times
 
+
 import addon
 import config
 import help
 import term
 import types
+
+const pollRate = 20
 
 proc assignIds(addons: seq[Addon]) =
   var ids: set[int16]
@@ -88,10 +92,10 @@ proc addonFromId(id: int16): Option[Addon] =
     if a.id == id: return some(a)
   return none(Addon)
 
-proc installAll(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
-  let futures = addons.map(install)
-  let opt = await all(futures)
-  return collect(for a in opt: (if a.isSome: a.get()))
+# proc installAll(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
+#   let futures = addons.map(install)
+#   let opt = await all(futures)
+#   return collect(for a in opt: (if a.isSome: a.get()))
 
 proc restoreAll(addons: seq[Addon]): seq[Addon] =
   let opt = addons.map(restore)
@@ -127,8 +131,6 @@ proc setup(args: seq[string]) =
       displayHelp("config")
   writeConfig(configData)
   quit()
-
-
 
 
 proc main() =
@@ -190,11 +192,15 @@ proc main() =
       if addon.isSome:
         var a = addon.get()
         a.line = line
+        a.action = Install
+        a.config = addr configData
         addons.add(a)
         line += 1
   of Update, Empty:
     for addon in configData.addons:
       addon.line = line
+      addon.action = Install
+      addon.config = addr configData
       addons.add(addon)
       line += 1
   of Remove, Restore, Pin, Unpin:
@@ -225,41 +231,65 @@ proc main() =
     else:
       displayHelp()
 
-  var processed, rest, final: seq[Addon]
-  case action
-  of Install, Update, Empty:
-    processed = waitFor addons.installAll()
-    assignIds(processed.concat(configData.addons))
-  of Remove:
-    processed = addons.map(uninstall)
-  of Pin:
-    processed = addons.map(pin)
-  of Unpin:
-    processed = addons.map(unpin)
-  of Restore:
-    processed = addons.restoreAll()
-  of List:
-    if addons.len == 0:
-      quit()
-    let maxName = addons[addons.map(a => a.name.len).maxIndex()].name.len
-    let maxVersion = addons[addons.map(a => a.version.len).maxIndex()].version.len
-    for a in addons:
-      a.list(maxName + 2, maxVersion + 2)
-    let t = configData.term
-    t.write(0, t.yMax, false, "\n")
-    quit()
-  of Help, Setup: discard
+  chan.open()
+  var thr = newSeq[Thread[Addon]](len = addons.len)
+  for i, addon in enumerate(addons):
+    createThread(thr[i], workQueue, addon)
 
-  rest = configData.addons.filter(addon => addon notin processed)
-  final = if action != Remove: concat(processed, rest) else: rest
+  echo "outer loop"
+  while true:
+    echo "inner loop"
+    while true:
+      let (ok, addon) = chan.tryRecv()
+      if ok:
+        echo addon.name, " - ", addon.state
+      else:
+        echo "breaking inner loop"
+        break
+    var runningCount = 0
+    for t in thr:
+      if t.running:
+        runningCount += 1
+    if runningCount == 0:
+      echo "breaking outer loop"
+      break
+    sleep(pollRate)
 
-  writeAddons(final)
-  writeConfig(configData)
+  # var processed, rest, final: seq[Addon]
+  # case action
+  # of Install, Update, Empty:
+  #   # processed = waitFor addons.installAll()
+  #   assignIds(processed.concat(configData.addons))
+  # of Remove:
+  #   processed = addons.map(uninstall)
+  # of Pin:
+  #   processed = addons.map(pin)
+  # of Unpin:
+  #   processed = addons.map(unpin)
+  # of Restore:
+  #   processed = addons.restoreAll()
+  # of List:
+  #   if addons.len == 0:
+  #     quit()
+  #   let maxName = addons[addons.map(a => a.name.len).maxIndex()].name.len
+  #   let maxVersion = addons[addons.map(a => a.version.len).maxIndex()].version.len
+  #   for a in addons:
+  #     a.list(maxName + 2, maxVersion + 2)
+  #   let t = configData.term
+  #   t.write(0, t.yMax, false, "\n")
+  #   quit()
+  # of Help, Setup: discard
 
-  let t = configData.term
-  t.write(0, t.yMax, false, "\n")
-  for item in configData.log:
-    t.write(0, t.yMax, false, fgRed, &"\nError: ", fgCyan, item.addon.getName, "\n", resetStyle)
-    t.write(4, t.yMax, false, fgDefault, item.msg, "\n", resetStyle)
+  # rest = configData.addons.filter(addon => addon notin processed)
+  # final = if action != Remove: concat(processed, rest) else: rest
+
+  # writeAddons(final)
+  # writeConfig(configData)
+
+  # let t = configData.term
+  # t.write(0, t.yMax, false, "\n")
+  # for item in configData.log:
+  #   t.write(0, t.yMax, false, fgRed, &"\nError: ", fgCyan, item.addon.getName, "\n", resetStyle)
+  #   t.write(4, t.yMax, false, fgDefault, item.msg, "\n", resetStyle)
 
 main()

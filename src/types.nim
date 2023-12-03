@@ -32,11 +32,11 @@ type
   AddonKind* = enum
     Github, GithubRepo, Gitlab, Tukui, Wowint, Curse
 
-  Error* = object
+  Error* = ref object
     addon*: Addon
     msg*: string
 
-  Config* = object
+  Config* = ref object
     mode*: Mode
     tempDir*: string
     installDir*: string
@@ -51,6 +51,7 @@ type
     githubToken*: string
 
   Addon* = ref object
+    action*: Action
     state*: AddonState
     project*: string
     branch*: Option[string]
@@ -66,6 +67,7 @@ type
     line*: int
     pinned*: bool
     time*: DateTime
+    config*: ptr Config
 
   Term* = ref object
     f*: File

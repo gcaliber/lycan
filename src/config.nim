@@ -8,6 +8,7 @@ import types
 import term
 
 var configData*: Config
+var chan*: Channel[Addon]
 
 proc fromJsonHook(a: var Addon, j: JsonNode) =
   var
