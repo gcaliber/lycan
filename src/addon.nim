@@ -50,7 +50,7 @@ proc getName*(addon: Addon): string =
   result = if not addon.name.isEmptyOrWhitespace: addon.name 
   else: $addon.kind & ':' & addon.project
 
-proc stateMessage(addon: Addon) = 
+proc stateMessage*(addon: Addon) = 
   let 
     t = configData.term
     indent = 2
@@ -434,20 +434,17 @@ proc install*(addon: Addon) {.gcsafe.} =
   else:
     addon.setAddonState(FinishedAlreadyCurrent)
 
-proc uninstall*(addon: Addon): Addon =
+proc uninstall*(addon: Addon) =
   addon.removeAddonFiles(removeAllBackups = true)
   addon.setAddonState(Removed)
-  return addon
 
-proc pin*(addon: Addon): Addon =
+proc pin*(addon: Addon) =
   addon.pinned = true
   addon.setAddonState(Pinned)
-  return addon
 
-proc unpin*(addon: Addon): Addon =
+proc unpin*(addon: Addon) =
   addon.pinned = false
   addon.setAddonState(Unpinned)
-  return addon
 
 proc list*(addon: Addon, nameSpace: int, versionSpace: int) =
   let
@@ -472,12 +469,12 @@ proc list*(addon: Addon, nameSpace: int, versionSpace: int) =
     fgWhite, &"{time}",
     resetStyle)
 
-proc restore*(addon: Addon): Option[Addon] =
+proc restore*(addon: Addon) =
   addon.setAddonState(Restoring)
   var backups = getBackupFiles(addon)
   if len(backups) < 2:
     addon.setAddonState(NoBackup)
-    return none(Addon)
+    return
   let filename = backups[0]
   let start = filename.find("&V=") + 3
   addon.filename = filename
@@ -488,21 +485,14 @@ proc restore*(addon: Addon): Option[Addon] =
   addon.moveDirs()
   addon.setAddonState(Restored)
   if addon.state == Failed:
-    return none(Addon)
+    return
   removeFile(backups[1])
-  return some(addon)
 
 proc workQueue*(addon: Addon) {.thread.} =
   case addon.action:
-  of Install:
-    sleep(3000)
-    addon.install()
-  of Update: discard
-  of Remove: discard
-  of List: discard
-  of Pin: discard
-  of Unpin: discard
-  of Restore: discard
-  of Setup: discard
-  of Empty: discard
-  of Help: discard
+  of Install: addon.install()
+  of Remove:  addon.uninstall()
+  of Pin:     addon.pin()
+  of Unpin:   addon.unpin()
+  of Restore: addon.restore()
+  of Update, List, Setup, Empty, Help: discard
