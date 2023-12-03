@@ -245,6 +245,8 @@ proc main() =
     let maxVersion = addons[addons.map(a => a.version.len).maxIndex()].version.len
     for a in addons:
       a.list(maxName + 2, maxVersion + 2)
+    let t = configData.term
+    t.write(0, t.yMax, false, "\n")
     quit()
   of Help, Setup: discard
 
@@ -255,8 +257,7 @@ proc main() =
   writeConfig(configData)
 
   let t = configData.term
-  if configData.log.len > 0:
-    t.write(0, t.yMax, false, "\n")
+  t.write(0, t.yMax, false, "\n")
   for item in configData.log:
     t.write(0, t.yMax, false, fgRed, &"\nError: ", fgCyan, item.addon.getName, "\n", resetStyle)
     t.write(4, t.yMax, false, fgDefault, item.msg, "\n", resetStyle)
