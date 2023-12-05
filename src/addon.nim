@@ -111,6 +111,10 @@ proc setName(addon: Addon, json: JsonNode, name: string = "none") =
   case addon.kind
   of Curse:
     addon.name = json["fileName"].getStr().split('-')[0]
+    if addon.name.endsWith(".zip"):
+      addon.name = json["fileName"].getStr().split('_')[0]
+    if addon.name.endsWith(".zip"):
+      addon.name = json["fileName"].getStr().split('.')[0]
   of Github, GithubRepo, Gitlab:
     addon.name = addon.project.split('/')[^1]
   of Tukui:
@@ -125,7 +129,10 @@ proc setVersion(addon: Addon, json: JsonNode) =
   addon.old_version = addon.version
   case addon.kind
   of Curse:
-    addon.version = json["displayName"].getStr()
+    try:
+      addon.version = json["displayName"].getStr()
+    except KeyError:
+      addon.version = json["dateModified"].getStr()
   of Github:
     let v = json["tag_name"].getStr()
     addon.version = if v != "": v else: json["name"].getStr()
