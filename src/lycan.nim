@@ -185,6 +185,9 @@ proc main() =
         a.action = Install
         addons.add(a)
         line += 1
+    if addons.len == 0:
+      echo "Unable to parse any provided URLs"
+      quit()
   of Update, Empty:
     for addon in configData.addons:
       addon.line = line
@@ -240,32 +243,32 @@ proc main() =
     addon.config = addr configData
     createThread(thr[i], workQueue, addon)
 
+  var processed, rest, final: seq[Addon]
   while true:
     while true:
       let (ok, addon) = chan.tryRecv()
       if ok:
         addon.stateMessage()
+        if addon.state == Done:
+          processed.add(addon)
       else:
         break
     var runningCount = 0
     for t in thr:
       runningCount += int(t.running)
     if runningCount == 0:
-      while true:
-        let (ok, addon) = chan.tryRecv()
-        if ok:
-          addon.stateMessage()
-        else:
-          break
       break
     sleep(pollRate)
 
-  var processed, rest, final: seq[Addon]
-  for addon in addons:
-    if addon.state != Failed:
-      processed.add(addon)
-
-  echo processed.len
+  while true:
+    let (ok, addon) = chan.tryRecv()
+    if ok:
+      addon.stateMessage()
+      if addon.state == Done:
+        processed.add(addon)
+    else:
+      break
+  thr.joinThreads()
   
   case action
   of Install:
@@ -277,7 +280,7 @@ proc main() =
   final = if action != Remove: concat(processed, rest) else: rest
 
   writeAddons(final)
-  writeConfig(configData)
+  # writeConfig(configData)
 
   let t = configData.term
   t.write(0, t.yMax, false, "\n")

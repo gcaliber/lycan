@@ -3,8 +3,8 @@ import std/asyncdispatch
 import std/colors
 import std/enumerate
 import std/httpclient
-import std/json
-import std/jsonutils
+import std/[json, jsonutils]
+import std/locks
 import std/options
 import std/os
 import std/re
@@ -58,6 +58,7 @@ proc stateMessage*(addon: Addon) =
     arrow = if addon.old_version.isEmptyOrWhitespace: "" else: "->"
     colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
     style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
+  acquire(lock)
   case addon.state
   of Checking, Parsing:
     t.write(indent, addon.line, true, colors, style,
@@ -97,6 +98,9 @@ proc stateMessage*(addon: Addon) =
     t.write(indent, addon.line, true, colors, style,
       fgRed, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
+  of Done:
+    discard
+  release(lock)
 
 proc setAddonState(addon: Addon, state: AddonState, err: string = "") =
   if addon.state != Failed:
@@ -496,3 +500,6 @@ proc workQueue*(addon: Addon) {.thread.} =
   of Unpin:   addon.unpin()
   of Restore: addon.restore()
   of Update, List, Setup, Empty, Help: discard
+  if addon.state != Failed:
+    addon.state = Done
+  chan.send(addon)
