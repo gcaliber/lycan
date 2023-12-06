@@ -29,7 +29,6 @@ proc newAddon*(project: string, kind: AddonKind, branch: Option[string] = none(s
   result.project = project
   result.kind = kind
   result.branch = branch
-  result.name = name
 
 proc prettyVersion(addon: Addon): string =
   if addon.version.isEmptyOrWhitespace: return ""

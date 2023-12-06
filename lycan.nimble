@@ -12,3 +12,4 @@ bin           = @["lycan"]
 
 requires "nim >= 1.7.3"
 requires "zip >= 0.10.4"
+requires "https://github.com/inverimus/webdriver"
