@@ -132,6 +132,7 @@ proc setVersion(addon: Addon, json: JsonNode) =
   case addon.kind
   of Curse:
     try:
+      # Some addons seem to use this as a version string while others exclude it
       addon.version = json["displayName"].getStr()
     except KeyError:
       addon.version = json["dateModified"].getStr()
