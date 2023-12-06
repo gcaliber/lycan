@@ -29,13 +29,14 @@ type
     Removed = "Removed",
     NoBackup = "Not Found"
     Done = "Done"
+    DoneFailed = "Failed"
   
   AddonKind* = enum
     Github, GithubRepo, Gitlab, Tukui, Wowint, Curse
 
-  Error* = ref object
-    addon*: Addon
-    msg*: string
+  # Error* = ref object
+  #   addon*: Addon
+  #   msg*: string
 
   Config* = ref object
     mode*: Mode
@@ -47,7 +48,7 @@ type
     tukuiCache*: JsonNode
     addons*: seq[Addon]
     term*: Term
-    log*: seq[Error]
+    # log*: seq[Error]
     local*: bool
     githubToken*: string
 
@@ -69,6 +70,7 @@ type
     pinned*: bool
     time*: DateTime
     config*: ptr Config
+    errorMsg*: string
 
   Term* = ref object
     f*: File

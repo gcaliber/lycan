@@ -58,7 +58,7 @@ proc stateMessage*(addon: Addon) =
     arrow = if addon.old_version.isEmptyOrWhitespace: "" else: "->"
     colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
     style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
-  acquire(lock)
+  acquire(stdoutLock)
   case addon.state
   of Checking, Parsing:
     t.write(indent, addon.line, true, colors, style,
@@ -98,15 +98,14 @@ proc stateMessage*(addon: Addon) =
     t.write(indent, addon.line, true, colors, style,
       fgRed, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
-  of Done:
+  of Done, DoneFailed:
     discard
-  release(lock)
+  release(stdoutLock)
 
 proc setAddonState(addon: Addon, state: AddonState, err: string = "") =
   if addon.state != Failed:
     addon.state = state
-  if err != "":
-    addon.config.log.add(Error(addon: addon, msg: err))
+    addon.errorMsg = err
   chan.send(addon)
 
 proc setName(addon: Addon, json: JsonNode, name: string = "none") =
@@ -450,28 +449,41 @@ proc unpin*(addon: Addon) =
   addon.pinned = false
   addon.setAddonState(Unpinned)
 
-proc list*(addon: Addon, nameSpace: int, versionSpace: int) =
+proc list*(addons: var seq[Addon], sortByTime: bool = false) =
+  if sortByTime:
+    addons.sort((a, z) => int(a.time < z.time))
+  for line, addon in enumerate(addons):
+    addon.line = line
+  if addons.len == 0:
+    echo "No addons installed"
+    quit()
   let
     t = configData.term
-    even = addon.line mod 2 == 0
-    colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
-    style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
-    kind = case addon.kind 
-      of GithubRepo: "Github"
-      else: $addon.kind
-    pin = if addon.pinned: "!" else: ""
-    branch = if addon.branch.isSome: addon.branch.get() else: ""
-    time = addon.time.format("MM/dd h:mm")
-  t.write(1, addon.line, true, colors, style,
-    fgBlue, &"{addon.id:<3}",
-    fgWhite, &"{addon.name.alignLeft(nameSpace)}",
-    fgRed, pin,
-    fgGreen, &"{addon.prettyVersion().alignLeft(versionSpace)}",
-    fgCyan, &"{kind:<6}",
-    fgWhite, if addon.branch.isSome: "@" else: "",
-    fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}",
-    fgWhite, &"{time}",
-    resetStyle)
+    nameSpace = addons[addons.map(a => a.name.len).maxIndex()].name.len + 2
+    versionSpace = addons[addons.map(a => a.version.len).maxIndex()].version.len + 2
+  for addon in addons:
+    let
+      even = addon.line mod 2 == 0
+      colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
+      style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
+      kind = case addon.kind 
+        of GithubRepo: "Github"
+        else: $addon.kind      
+      pin = if addon.pinned: "!" else: ""
+      branch = if addon.branch.isSome: addon.branch.get() else: ""
+      time = addon.time.format("MM/dd h:mm")
+    t.write(1, addon.line, true, colors, style,
+      fgBlue, &"{addon.id:<3}",
+      fgWhite, &"{addon.name.alignLeft(nameSpace)}",
+      fgRed, pin,
+      fgGreen, &"{addon.prettyVersion().alignLeft(versionSpace)}",
+      fgCyan, &"{kind:<6}",
+      fgWhite, if addon.branch.isSome: "@" else: "",
+      fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}",
+      fgWhite, &"{time}",
+      resetStyle)
+  t.write(0, t.yMax, false, "\n")
+  quit()
 
 proc restore*(addon: Addon) =
   addon.setAddonState(Restoring)
@@ -500,6 +512,8 @@ proc workQueue*(addon: Addon) {.thread.} =
   of Unpin:   addon.unpin()
   of Restore: addon.restore()
   of Update, List, Setup, Empty, Help: discard
-  if addon.state != Failed:
+  if addon.state == Failed:
+    addon.state = DoneFailed
+  else:
     addon.state = Done
   chan.send(addon)

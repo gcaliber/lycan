@@ -10,8 +10,10 @@ import term
 
 var configData*: Config
 var chan*: Channel[Addon]
-var lock*: Lock
-initLock(lock)
+var stdoutLock*: Lock
+var configLock*: Lock
+initLock(stdoutLock)
+initLock(configLock)
 
 proc fromJsonHook(a: var Addon, j: JsonNode) =
   var

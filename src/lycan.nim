@@ -19,7 +19,6 @@ import std/sugar
 import std/terminal
 import std/times
 
-
 import addon
 import config
 import help
@@ -122,6 +121,17 @@ proc setup(args: seq[string]) =
   writeConfig(configData)
   quit()
 
+proc processMessages(): seq[Addon] =
+  while true:
+    let (ok, addon) = chan.tryRecv()
+    if ok:
+      case addon.state
+      of Done, DoneFailed:
+        result.add(addon)
+      else:
+        addon.stateMessage()
+    else:
+      break
 
 proc main() =
   var opt = initOptParser(
@@ -215,20 +225,8 @@ proc main() =
         line += 1
   of List:
     addons = configData.addons
-    if "t" in args or "time" in args:
-      addons.sort((a, z) => int(a.time < z.time))
-    for addon in addons:
-      addon.line = line
-      line += 1
-    if addons.len == 0:
-      quit()
-    let maxName = addons[addons.map(a => a.name.len).maxIndex()].name.len
-    let maxVersion = addons[addons.map(a => a.version.len).maxIndex()].version.len
-    for a in addons:
-      a.list(maxName + 2, maxVersion + 2)
-    let t = configData.term
-    t.write(0, t.yMax, false, "\n")
-    quit()
+    let sortByTime = if "t" in args or "time" in args: true else: false
+    addons.list(sortByTime)
   of Setup:
     setup(args)
   of Help:
@@ -243,49 +241,40 @@ proc main() =
     addon.config = addr configData
     createThread(thr[i], workQueue, addon)
 
-  var processed, rest, final: seq[Addon]
+  var processed, failed, success, rest, final: seq[Addon]
   while true:
-    while true:
-      let (ok, addon) = chan.tryRecv()
-      if ok:
-        addon.stateMessage()
-        if addon.state == Done:
-          processed.add(addon)
-      else:
-        break
+    processed &= processMessages()
     var runningCount = 0
     for t in thr:
       runningCount += int(t.running)
     if runningCount == 0:
       break
     sleep(pollRate)
-
-  while true:
-    let (ok, addon) = chan.tryRecv()
-    if ok:
-      addon.stateMessage()
-      if addon.state == Done:
-        processed.add(addon)
-    else:
-      break
+  
+  processed &= processMessages()
   thr.joinThreads()
   
+  for addon in processed:
+    if addon.state == DoneFailed:
+      failed.add(addon)
+    else:
+      success.add(addon)
+
   case action
   of Install:
-    assignIds(processed.concat(configData.addons))
+    assignIds(success.concat(configData.addons))
   else:
     discard
 
-  rest = configData.addons.filter(addon => addon notin processed)
-  final = if action != Remove: concat(processed, rest) else: rest
+  rest = configData.addons.filter(addon => addon notin success)
+  final = if action != Remove: success & rest else: rest
 
   writeAddons(final)
-  # writeConfig(configData)
 
   let t = configData.term
   t.write(0, t.yMax, false, "\n")
-  for item in configData.log:
-    t.write(0, t.yMax, false, fgRed, &"\nError: ", fgCyan, item.addon.getName, "\n", resetStyle)
-    t.write(4, t.yMax, false, fgDefault, item.msg, "\n", resetStyle)
+  for addon in failed:
+    t.write(0, t.yMax, false, fgRed, styleBright, &"\nError: ", fgCyan, addon.getName, "\n", resetStyle)
+    t.write(4, t.yMax, false, fgWhite, addon.errorMsg, "\n", resetStyle)
 
 main()
