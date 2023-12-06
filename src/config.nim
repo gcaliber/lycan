@@ -50,33 +50,27 @@ proc dir(mode: Mode): string =
   return '_' & $mode & '_'
 
 proc getWowDir(mode: Mode): string =
-  echo &"No configuration found. Searching for World of Warcraft install location for mode: {$mode}"
+  var searchPaths: seq[Path]
+  try:
+    let root = configData.installDir.parentDir().parentDir().parentDir()
+    if root != ""
+      searchPaths.add(root)
+  except:
+    discard
   var root = getHomeDir()
+  let dir = mode.dir()
   when defined(windows):
     let default = joinPath("C:", "Program Files (x86)", "World of Warcraft")
-    if dirExists(default):
+    if dirExists(default / dir):
       return default
     root = "C:"
-  for path in walkDirRec(root, yieldFilter = {pcDir}):
-    let dir = mode.dir()
-    if path.contains("World of Warcraft" / dir):
-      var wow = path
-      while not wow.endsWith("World of Warcraft"):
-        wow = parentDir(wow)
-      if dirExists(joinPath(wow, dir, "Interface", "AddOns")):
+    for root in searchPaths:
+      for path in walkDirRec(root, yieldFilter = {pcDir}):
+      if path.contains("World of Warcraft" / dir):
+        var wow = path
+        while not wow.endsWith("World of Warcraft"):
+          wow = parentDir(wow)
         return wow
-      else:
-        echo &"Found WoW install location: {wow}"
-        echo "No AddOns directory was found. Make sure you have started WoW at least once."
-        echo "If this location is incorrect you can set it manually:"
-        echo "  lycan --config path <path/to/World of Warcraft>\n"
-        return ""
-  echo "Unable to determine the World of Warcraft install location."
-  echo "Set the location manually:"
-  echo "  lycan --config path <path/to/World of Warcraft>\n"
-  echo "Change modes:"
-  echo "  lycan --config mode <mode>\n"
-  echo "For supported modes see lycan --help"
   return ""
 
 let 
@@ -107,10 +101,18 @@ proc writeConfig*(config: Config) =
         json[$mode] = existingConfig[$mode]
       except KeyError:
         json[$mode] = newJObject()
-        json[$mode]["addonJsonFile"] = %""
-        json[$mode]["installDir"] = %""
         json[$mode]["backupEnabled"] = %true
-        json[$mode]["backupDir"] = %""
+        let wowPath = getWowDir(mode)
+        let dir = mode.dir()
+        let addonsPath = joinPath(wowPath, dir, "Interface", "AddOns")
+        if wowPath != "" and dirExists(addonsPath):
+          json[$mode]["addonJsonFile"] = %joinPath(wowPath, dir, "WTF", "lycan_addons.json")
+          json[$mode]["installDir"] = %addonsPath
+          json[$mode]["backupDir"] = %joinPath(wowPath, dir, "Interface", "lycan_backup")
+        else:
+          json[$mode]["addonJsonFile"] = %""
+          json[$mode]["installDir"] = %""
+          json[$mode]["backupDir"] = %""
   if not dirExists(path.parentDir()):
     createDir(path.parentDir())
   writeFile(path, pretty(json))
@@ -167,14 +169,25 @@ proc loadConfig*(newMode: Mode = None, newPath: string = ""): Config =
     result.backupEnabled = settings["backupEnabled"].getBool()
     result.backupDir = settings["backupDir"].getStr()
   else:
-    var wow = if newPath == "": getWowDir(mode) else: newPath
+    let wowPath = if newPath != "": newPath else: getWowDir(mode)
+    if wowPath == "":
+      echo "Unable to determine the World of Warcraft install location."
+      echo "Set the location manually:"
+      echo "  lycan --config path <path/to/World of Warcraft>\n"
+      echo "Change modes:"
+      echo "  lycan --config mode <mode>\n"
+      echo "For supported modes see lycan --help"
+      quit()
+    let dir = mode.dir()
+    let addonsPath = joinPath(wowPath, dir, "Interface", "AddOns")
+    if not dirExists(addonsPath):
+      echo &"Found a WoW directory: {wowPath}\nNo AddOns directory was found. Make sure you have started WoW at least once."
     result.backupEnabled = true
-    if wow != "":
-      let dir = mode.dir()
-      addonJsonFile = joinPath(wow, dir, "WTF", "lycan_addons.json")
-      result.installDir = joinPath(wow, dir, "Interface", "AddOns")
+    if wowPath != "":
+      addonJsonFile = joinPath(wowPath, dir, "WTF", "lycan_addons.json")
+      result.installDir = addonsPath
       result.addonJsonFile = addonJsonFile
-      result.backupDir = joinPath(wow, dir, "Interface", "lycan_backup")
+      result.backupDir = joinPath(wowPath, dir, "Interface", "lycan_backup")
 
   try:
     result.githubToken = configJson["githubToken"].getStr()
