@@ -220,7 +220,6 @@ proc getLatest(addon: Addon): Response =
   let client = newHttpClient(headers = headers)
   return client.get(url)
 
-
 proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   if addon.state == Failed: return
   var headers = newHttpHeaders()
@@ -233,7 +232,7 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   let client = newHttpClient(headers = headers)
   let response = client.get(addon.downloadUrl)
   if not response.status.contains("200"):
-    addon.setAddonState(Failed, err = &"Response {response.status}: {addon.getLatestUrl()}")
+    addon.setAddonState(Failed, err = &"While downloading got response {response.status}: {addon.getLatestUrl()}")
     return
   var downloadName: string
   case addon.kind:
@@ -251,12 +250,10 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   except CatchableError as e:
     addon.setAddonState(Failed, e.msg)
     return
-  # let futureBody = response.body
-  # yield futureBody
-  # if futureBody.failed:
-  #   addon.setAddonState(Failed, &"Download failed: {addon.downloadUrl}")
-  #   return
-  system.write(file, response.body)
+  try:
+    system.write(file, response.body)
+  except:
+    addon.setAddonState(Failed, &"Encountered a problem while downloading.")
   close(file)
 
 proc processTocs(path: string): bool =
@@ -376,14 +373,20 @@ proc curseGetProject(addon: Addon) {.gcsafe.} =
 
     waitFor driver.deleteSession()
     waitFor driver.close()
+  except CatchableError as e:
+    addon.setAddonState(Failed, &"{e.name}\n{e.msg}")
+    if e.name == $OSError and e.msg.startsWith("The parameter is incorrect"):
+      addon.setAddonState(Failed, &"Unable to launch chromedriver. This must be installed in order to use addons from curseforge.\n    For more details: lycan --help webdriver")
+    else:
+      addon.setAddonState(Failed, &"{e.name}: {e.msg}")
   except:
-    addon.setAddonState(Failed, &"TODO: Fix exceptions for chromedriver errors")
+    addon.setAddonState(Failed, &"Unknown error. Try again and if the problem persists open an issue at https://github.com/inverimus/lycan")
 
 proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
   var json: JsonNode
   let response = addon.getLatest()
   if not response.status.contains("200"):
-    addon.setAddonState(Failed, err = &"Response {response.status}: {addon.getLatestUrl()}")
+    addon.setAddonState(Failed, err = &"Response while retrieving latest addon info {response.status}: {addon.getLatestUrl()}")
     return
   json = parseJson(response.body)
   case addon.kind:
@@ -399,12 +402,12 @@ proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
       for num in gameVersions:
         if num.startsWith(gameVersionNumber):
           return json["data"][i]
-    addon.setAddonState(Failed, "Addon for current game mode not found.")
+    addon.setAddonState(Failed, &"JSON Error: No game version matches current mode of {addon.config.mode}.")
   of Tukui:
     for data in json:
       if data["slug"].getStr() == addon.project:
         return data
-    addon.setAddonState(Failed, "Addon not found in json.")
+    addon.setAddonState(Failed, "JSON Error: Addon not found.")
     return
   else:
     discard
@@ -430,8 +433,6 @@ proc install*(addon: Addon) {.gcsafe.} =
     addon.unzip()
     addon.createBackup()
     addon.moveDirs()
-    if addon.state == Failed:
-      return
     if addon.oldVersion.isEmptyOrWhitespace:
       addon.setAddonState(FinishedInstalled)
     else:
@@ -502,9 +503,8 @@ proc restore*(addon: Addon) =
   addon.unzip()
   addon.moveDirs()
   addon.setAddonState(Restored)
-  if addon.state == Failed:
-    return
-  removeFile(backups[1])
+  if addon.state != Failed:
+    removeFile(backups[1])
 
 proc workQueue*(addon: Addon) {.thread.} =
   case addon.action:
@@ -513,7 +513,7 @@ proc workQueue*(addon: Addon) {.thread.} =
   of Pin:     addon.pin()
   of Unpin:   addon.unpin()
   of Restore: addon.restore()
-  of Update, List, Setup, Empty, Help: discard
+  else: discard
   if addon.state == Failed:
     addon.state = DoneFailed
   else:
