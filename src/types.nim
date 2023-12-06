@@ -9,7 +9,7 @@ type
   Mode* = enum
     Retail = "retail",
     Vanilla = "classic_era",
-    Wrath = "classic"
+    Classic = "classic"
     None = "",
 
   AddonState* = enum

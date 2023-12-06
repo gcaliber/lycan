@@ -95,7 +95,7 @@ proc writeConfig*(config: Config) =
     existingConfig = parseJson(file)
   except JsonParsingError:
     existingConfig = newJObject()
-  for mode in [Retail, Vanilla, Wrath]:
+  for mode in [Retail, Vanilla, Classic]:
     if mode == config.mode:
       json[$mode] = newJObject()
       json[$mode]["addonJsonFile"] = %config.addonJsonFile
@@ -204,14 +204,14 @@ proc setMode*(mode: string) =
   case mode.toLower()
   of "retail", "r":
     configData.mode = Retail
-  of "classic", "wrath", "wrathc", "wotlk", "wotlkc", "w":
-    configData.mode = Wrath
-  of "classic_era", "vanilla", "v":
+  of "classic", "wrath", "c", "w":
+    configData.mode = Classic
+  of "classic_era", "vanilla", "v", "ce":
     configData.mode = Vanilla
   else:
-    echo "Valid modes are"
+    echo "Supported modes are"
     echo "  retail, r    Most recent retail expansion"
-    echo "  wrath, w     Wrath of the Lich King Classic"
+    echo "  classic, c   Wrath of the Lich King Classic"
     echo "  vanilla, v   Vanilla era Classic"
   configData = loadConfig(configData.mode)
 
