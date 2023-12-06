@@ -34,10 +34,6 @@ type
   AddonKind* = enum
     Github, GithubRepo, Gitlab, Tukui, Wowint, Curse
 
-  # Error* = ref object
-  #   addon*: Addon
-  #   msg*: string
-
   Config* = ref object
     mode*: Mode
     tempDir*: string
@@ -48,7 +44,6 @@ type
     tukuiCache*: JsonNode
     addons*: seq[Addon]
     term*: Term
-    # log*: seq[Error]
     local*: bool
     githubToken*: string
 

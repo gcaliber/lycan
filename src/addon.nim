@@ -292,12 +292,6 @@ proc getBackupFiles(addon: Addon): seq[string] {.gcsafe.} =
   backups.sort((a, b) => int(getCreationTime(a).toUnix() - getCreationTime(b).toUnix()))
   return backups
 
-# proc removeAddonFiles(addon: Addon, removeAllBackups: bool) =
-#   addon.dirs.apply(d => removeDir(addon.config.installDir / d))
-#   var backups = getBackupFiles(addon)
-#   if removeAllBackups:
-#     backups.apply(removeFile)
-
 proc removeAddonFiles(addon: Addon, removeAllBackups: bool) =
   for dir in addon.dirs:
     removeDir(addon.config.installDir / dir)

@@ -11,9 +11,7 @@ import term
 var configData*: Config
 var chan*: Channel[Addon]
 var stdoutLock*: Lock
-var configLock*: Lock
 initLock(stdoutLock)
-initLock(configLock)
 
 proc fromJsonHook(a: var Addon, j: JsonNode) =
   var
