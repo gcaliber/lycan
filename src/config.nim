@@ -50,22 +50,22 @@ proc dir(mode: Mode): string =
   return '_' & $mode & '_'
 
 proc getWowDir(mode: Mode): string =
-  var searchPaths: seq[Path]
+  var searchPaths: seq[string]
   try:
-    let root = configData.installDir.parentDir().parentDir().parentDir()
-    if root != ""
-      searchPaths.add(root)
+    let knownDir = configData.installDir.parentDir().parentDir().parentDir()
+    if knownDir != "":
+      searchPaths.add(knownDir)
   except:
     discard
-  var root = getHomeDir()
+  searchPaths.add(getHomeDir())
   let dir = mode.dir()
   when defined(windows):
     let default = joinPath("C:", "Program Files (x86)", "World of Warcraft")
     if dirExists(default / dir):
       return default
     root = "C:"
-    for root in searchPaths:
-      for path in walkDirRec(root, yieldFilter = {pcDir}):
+  for root in searchPaths:
+    for path in walkDirRec(root, yieldFilter = {pcDir}):
       if path.contains("World of Warcraft" / dir):
         var wow = path
         while not wow.endsWith("World of Warcraft"):
