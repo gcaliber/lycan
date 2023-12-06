@@ -1,4 +1,5 @@
 import std/[json, jsonutils]
+import std/locks
 import std/options
 import std/os
 import std/[strformat, strutils]
@@ -8,6 +9,9 @@ import types
 import term
 
 var configData*: Config
+var chan*: Channel[Addon]
+var stdoutLock*: Lock
+initLock(stdoutLock)
 
 proc fromJsonHook(a: var Addon, j: JsonNode) =
   var

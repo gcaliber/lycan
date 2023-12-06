@@ -8,7 +8,7 @@
 # https://github.com/p3lim-wow/QuickQuest https://www.tukui.org/elvui https://github.com/AdiAddons/AdiBags
 
 import std/algorithm
-import std/asyncdispatch
+import std/enumerate
 import std/[json, jsonutils]
 import std/options
 import std/[os, parseopt]
@@ -24,6 +24,8 @@ import config
 import help
 import term
 import types
+
+const pollRate = 20
 
 proc assignIds(addons: seq[Addon]) =
   var ids: set[int16]
@@ -88,15 +90,6 @@ proc addonFromId(id: int16): Option[Addon] =
     if a.id == id: return some(a)
   return none(Addon)
 
-proc installAll(addons: seq[Addon]): Future[seq[Addon]] {.async.} =
-  let futures = addons.map(install)
-  let opt = await all(futures)
-  return collect(for a in opt: (if a.isSome: a.get()))
-
-proc restoreAll(addons: seq[Addon]): seq[Addon] =
-  let opt = addons.map(restore)
-  return collect(for a in opt: (if a.isSome: a.get()))
-
 proc setup(args: seq[string]) =
   if len(args) == 0:
     assert configData.mode != None
@@ -128,8 +121,17 @@ proc setup(args: seq[string]) =
   writeConfig(configData)
   quit()
 
-
-
+proc processMessages(): seq[Addon] =
+  while true:
+    let (ok, addon) = chan.tryRecv()
+    if ok:
+      case addon.state
+      of Done, DoneFailed:
+        result.add(addon)
+      else:
+        addon.stateMessage()
+    else:
+      break
 
 proc main() =
   var opt = initOptParser(
@@ -190,11 +192,16 @@ proc main() =
       if addon.isSome:
         var a = addon.get()
         a.line = line
+        a.action = Install
         addons.add(a)
         line += 1
+    if addons.len == 0:
+      echo "Unable to parse any provided URLs"
+      quit()
   of Update, Empty:
     for addon in configData.addons:
       addon.line = line
+      addon.action = Install
       addons.add(addon)
       line += 1
   of Remove, Restore, Pin, Unpin:
@@ -208,15 +215,18 @@ proc main() =
       if addon.isSome:
         var a = addon.get()
         a.line = line
+        case action
+        of Remove: a.action = Remove
+        of Restore: a.action = Restore
+        of Pin: a.action = Pin
+        of Unpin: a.action = Unpin
+        else: discard
         addons.add(a)
         line += 1
   of List:
     addons = configData.addons
-    if "t" in args or "time" in args:
-      addons.sort((a, z) => int(a.time < z.time))
-    for addon in addons:
-      addon.line = line
-      line += 1
+    let sortByTime = if "t" in args or "time" in args: true else: false
+    addons.list(sortByTime)
   of Setup:
     setup(args)
   of Help:
@@ -225,41 +235,46 @@ proc main() =
     else:
       displayHelp()
 
-  var processed, rest, final: seq[Addon]
-  case action
-  of Install, Update, Empty:
-    processed = waitFor addons.installAll()
-    assignIds(processed.concat(configData.addons))
-  of Remove:
-    processed = addons.map(uninstall)
-  of Pin:
-    processed = addons.map(pin)
-  of Unpin:
-    processed = addons.map(unpin)
-  of Restore:
-    processed = addons.restoreAll()
-  of List:
-    if addons.len == 0:
-      quit()
-    let maxName = addons[addons.map(a => a.name.len).maxIndex()].name.len
-    let maxVersion = addons[addons.map(a => a.version.len).maxIndex()].version.len
-    for a in addons:
-      a.list(maxName + 2, maxVersion + 2)
-    let t = configData.term
-    t.write(0, t.yMax, false, "\n")
-    quit()
-  of Help, Setup: discard
+  chan.open()
+  var thr = newSeq[Thread[Addon]](len = addons.len)
+  for i, addon in enumerate(addons):
+    addon.config = addr configData
+    createThread(thr[i], workQueue, addon)
 
-  rest = configData.addons.filter(addon => addon notin processed)
-  final = if action != Remove: concat(processed, rest) else: rest
+  var processed, failed, success, rest, final: seq[Addon]
+  while true:
+    processed &= processMessages()
+    var runningCount = 0
+    for t in thr:
+      runningCount += int(t.running)
+    if runningCount == 0:
+      break
+    sleep(pollRate)
+  
+  processed &= processMessages()
+  thr.joinThreads()
+  
+  for addon in processed:
+    if addon.state == DoneFailed:
+      failed.add(addon)
+    else:
+      success.add(addon)
+
+  case action
+  of Install:
+    assignIds(success.concat(configData.addons))
+  else:
+    discard
+
+  rest = configData.addons.filter(addon => addon notin success)
+  final = if action != Remove: success & rest else: rest
 
   writeAddons(final)
-  writeConfig(configData)
 
   let t = configData.term
   t.write(0, t.yMax, false, "\n")
-  for item in configData.log:
-    t.write(0, t.yMax, false, fgRed, &"\nError: ", fgCyan, item.addon.getName, "\n", resetStyle)
-    t.write(4, t.yMax, false, fgDefault, item.msg, "\n", resetStyle)
+  for addon in failed:
+    t.write(0, t.yMax, false, fgRed, styleBright, &"\nError: ", fgCyan, addon.getName, "\n", resetStyle)
+    t.write(4, t.yMax, false, fgWhite, addon.errorMsg, "\n", resetStyle)
 
 main()
