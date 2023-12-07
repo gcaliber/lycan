@@ -268,6 +268,7 @@ proc main() =
   final = if action != Remove: success & rest else: rest
 
   writeAddons(final)
+  writeConfig(configData)
 
   let t = configData.term
   t.write(0, t.yMax, false, "\n")

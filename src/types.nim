@@ -6,6 +6,9 @@ type
   Action* = enum
     Install, Update, Remove, List, Pin, Unpin, Restore, Setup, Empty, Help
 
+  LogLevel* = enum
+    Off, Fatal, Warning, Info, Debug
+
   Mode* = enum
     Retail = "retail",
     Vanilla = "classic_era",
@@ -46,6 +49,7 @@ type
     term*: Term
     local*: bool
     githubToken*: string
+    logLevel*: LogLevel
 
   Addon* = ref object
     action*: Action

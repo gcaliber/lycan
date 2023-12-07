@@ -247,12 +247,12 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   try:
     file = open(addon.filename, fmWrite)
   except CatchableError as e:
-    addon.setAddonState(Failed, e.msg)
+    addon.setAddonState(Failed, &"Problem opening file {addon.filename}")
     return
   try:
     system.write(file, response.body)
   except:
-    addon.setAddonState(Failed, &"Encountered a problem while downloading.")
+    addon.setAddonState(Failed, &"Problem encountered while downloading.")
   close(file)
 
 proc processTocs(path: string): bool =
@@ -324,7 +324,7 @@ proc moveDirs(addon: Addon) {.gcsafe.} =
     try:
       moveDir(dir, destination)
     except CatchableError as e:
-      addon.setAddonState(Failed, e.msg)
+      addon.setAddonState(Failed, "Problem Pmoving Addon directories.")
 
 proc createBackup(addon: Addon) {.gcsafe.} =
   if addon.state == Failed: return
@@ -338,7 +338,7 @@ proc createBackup(addon: Addon) {.gcsafe.} =
   try:
     moveFile(addon.filename, addon.config.backupDir / name)
   except CatchableError as e:
-    addon.setAddonState(Failed, e.msg)
+    addon.setAddonState(Failed, "Problem creating backup files.")
     discard
 
 proc unzip(addon: Addon) {.gcsafe.} =
@@ -349,7 +349,7 @@ proc unzip(addon: Addon) {.gcsafe.} =
   try:
     extractAll(addon.filename, addon.extractDir)
   except CatchableError as e:
-    addon.setAddonState(Failed, e.msg)
+    addon.setAddonState(Failed, "Problem unzipping files.")
     discard
 
 proc curseGetProject(addon: Addon) {.gcsafe.} =
@@ -373,7 +373,7 @@ proc curseGetProject(addon: Addon) {.gcsafe.} =
     waitFor driver.deleteSession()
     waitFor driver.close()
   except CatchableError as e:
-    addon.setAddonState(Failed, &"{e.name}\n{e.msg}")
+    addon.setAddonState(Failed, &"{e.name}: {e.msg}")
     if e.name == $OSError and e.msg.startsWith("The parameter is incorrect"):
       addon.setAddonState(Failed, &"Unable to launch chromedriver. This must be installed in order to use addons from curseforge.\n    For more details: lycan --help webdriver")
     else:

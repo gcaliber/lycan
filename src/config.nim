@@ -11,7 +11,9 @@ import term
 var configData*: Config
 var chan*: Channel[Addon]
 var stdoutLock*: Lock
+var logLock*: Lock
 initLock(stdoutLock)
+initLock(logLock)
 
 proc fromJsonHook(a: var Addon, j: JsonNode) =
   var
@@ -48,22 +50,21 @@ proc parseInstalledAddons(filename: string): seq[Addon] =
 proc dir(mode: Mode): string =
   return '_' & $mode & '_'
 
-proc getWowDir(mode: Mode): string =
+proc getWowDir(mode: Mode, fast: bool = false): string =
   var searchPaths: seq[string]
-  try:
+  if not configData.isNil:
     let knownDir = configData.installDir.parentDir().parentDir().parentDir()
     if knownDir != "":
       searchPaths.add(knownDir)
-  except:
-    discard
   let dir = mode.dir()
-  when defined(windows):
-    let default = joinPath("C:", "Program Files (x86)", "World of Warcraft")
-    if dirExists(default / dir):
-      return default
-    searchPaths.add("C:")
-  else:
-    searchPaths.add(getHomeDir())
+  if not fast:
+    when defined(windows):
+      let default = joinPath("C:", "Program Files (x86)", "World of Warcraft")
+      if dirExists(default / dir):
+        return default
+      searchPaths.add("C:")
+    else:
+      searchPaths.add(getHomeDir())
   for root in searchPaths:
     for path in walkDirRec(root, yieldFilter = {pcDir}):
       if path.contains("World of Warcraft" / dir):
@@ -82,6 +83,7 @@ proc writeConfig*(config: Config) =
   let json = newJObject()
   json["mode"] = %config.mode
   json["githubToken"] = %config.githubToken
+  json["logLevel"] = %config.logLevel
   let path = if fileExists(localPath): localPath else: configPath
   let file = readFile(path)
   var existingConfig: JsonNode
@@ -102,7 +104,7 @@ proc writeConfig*(config: Config) =
       except KeyError:
         json[$mode] = newJObject()
         json[$mode]["backupEnabled"] = %true
-        let wowPath = getWowDir(mode)
+        let wowPath = getWowDir(mode, fast = true)
         let dir = mode.dir()
         let addonsPath = joinPath(wowPath, dir, "Interface", "AddOns")
         if wowPath != "" and dirExists(addonsPath):
@@ -117,7 +119,7 @@ proc writeConfig*(config: Config) =
     createDir(path.parentDir())
   writeFile(path, pretty(json))
 
-proc loadConfig*(newMode: Mode = None, newPath: string = ""): Config =
+proc loadConfig*(newMode: Mode = None, newPath: string = "", modeOnly = false): Config =
   var 
     configJson: JsonNode
     local = false
@@ -146,7 +148,9 @@ proc loadConfig*(newMode: Mode = None, newPath: string = ""): Config =
     settings: JsonNode
     modeExists = true
   result = Config()
+
   if not configJson.isNil:
+    result.logLevel.fromJson(configJson["logLevel"])
     try:
       if newMode == None:
         mode.fromJson(configJson["mode"])
@@ -158,9 +162,13 @@ proc loadConfig*(newMode: Mode = None, newPath: string = ""): Config =
     except KeyError:
       modeExists = false
   else:
+    result.logLevel = Debug
     mode = if newMode == None: Retail else: newMode
+    result.mode = mode
     modeExists = false
-  
+
+  if modeOnly: return
+
   var addonJsonFile: string
   if modeExists:
     addonJsonFile = settings["addonJsonFile"].getStr()
@@ -169,7 +177,12 @@ proc loadConfig*(newMode: Mode = None, newPath: string = ""): Config =
     result.backupEnabled = settings["backupEnabled"].getBool()
     result.backupDir = settings["backupDir"].getStr()
   else:
-    let wowPath = if newPath != "": newPath else: getWowDir(mode)
+    var wowPath: string
+    if newPath != "": 
+      wowPath = newPath
+    else: 
+      echo "Searching for World of Warcraft install location."
+      wowPath = getWowDir(mode)
     if wowPath == "":
       echo "Unable to determine the World of Warcraft install location."
       echo "Set the location manually:"
@@ -193,7 +206,6 @@ proc loadConfig*(newMode: Mode = None, newPath: string = ""): Config =
     result.githubToken = configJson["githubToken"].getStr()
   except:
     discard
-  result.mode = mode
   result.tempDir = getTempDir()
   result.term = termInit()
   result.local = local
@@ -201,14 +213,14 @@ proc loadConfig*(newMode: Mode = None, newPath: string = ""): Config =
     result.addons = parseInstalledAddons(addonJsonFile)
 
 proc setPath*(path: string) =
-  let normalPath = path.normalizePathEnd()
+  let normalPath = path.strip(chars = {'\'', '"'}).normalizePathEnd()
   if not dirExists(normalPath):
     echo &"Error: Path provided does not exist:\n  {normalPath}"
     quit()
-  let mode = configData.mode.dir()
-  let installDir = joinPath(normalPath, mode, "Interface", "AddOns")
-  if not dirExists(installDir):
-    echo &"Error: Did not find {installDir}"
+  let mode = loadConfig(modeOnly = true).mode.dir()
+  let addonDir = joinPath(normalPath, mode, "Interface", "AddOns")
+  if not dirExists(addonDir):
+    echo &"Error: Did not find {addonDir}"
     echo "Make sure you are in the correct mode and that World of Warcraft has been started at least once."
     quit()
   configData = loadConfig(newPath = normalPath)
@@ -236,7 +248,7 @@ proc setBackup*(arg: string) =
   of "n", "no", "off", "disable", "disabled", "false":
     configData.backupEnabled = false
   else:
-    let dir = normalizePathEnd(arg)
+    let dir = arg.strip(chars = {'\'', '"'}).normalizePathEnd()
     if not dirExists(dir):
       echo &"Error: Path provided does not exist:\n  {dir}"
       quit()
