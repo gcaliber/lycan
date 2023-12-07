@@ -5,7 +5,7 @@
 
 # https://www.tukui.org/elvui https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/woblight/actionmirroringframe https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
 
-# https://github.com/p3lim-wow/QuickQuest https://www.tukui.org/elvui https://github.com/AdiAddons/AdiBags
+# https://github.com/p3lim-wow/QuickQuest https://www.tukui.org/elvui https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html https://gitlab.com/woblight/actionmirroringframe
 
 import std/algorithm
 import std/enumerate
@@ -114,7 +114,7 @@ proc setup(args: seq[string]) =
   quit()
 
 proc processMessages(): seq[Addon] =
-  var nameSpace {.global.} = 0
+  var maxName {.global.} = 0
   var addons {.global.}: seq[Addon]
   while true:
     let (ok, addon) = chan.tryRecv()
@@ -125,9 +125,9 @@ proc processMessages(): seq[Addon] =
       else:
         addons = addons.filter(a => a != addon)
         addons.add(addon)
-        nameSpace = if addon.name.len > nameSpace: addon.name.len + 2 else: nameSpace
+        maxName = addons[addons.map(a => a.name.len).maxIndex()].name.len + 2
         for addon in addons:
-          addon.stateMessage(nameSpace)
+          addon.stateMessage(maxName)
     else:
       break
 
