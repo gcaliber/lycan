@@ -18,7 +18,6 @@ proc fromJsonHook(a: var Addon, j: JsonNode) =
     b: Option[string]
     d: seq[string]
     k: AddonKind
-  
   try:
     b = some(j["branch"].getStr())
   except KeyError:
