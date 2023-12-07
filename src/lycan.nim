@@ -92,15 +92,7 @@ proc addonFromId(id: int16): Option[Addon] =
 
 proc setup(args: seq[string]) =
   if len(args) == 0:
-    assert configData.mode != None
-    let mode = $configData.mode
-    echo &"Mode: {mode}"
-    echo &"Addons directory: {configData.installDir}"
-    echo &"Backups enabled: {configData.backupEnabled}"
-    if configData.backupEnabled:
-      echo &"Backups directory: {configData.backupDir}"
-    quit()
-
+    showConfig()
   if len(args) < 2:
     echo "Missing argument\n"
     displayHelp("config")
@@ -114,7 +106,7 @@ proc setup(args: seq[string]) =
     of "backup":
       setBackup(args[i + 1]); break
     of "github":
-      configData.githubToken = args[i + 1]; break
+      setGithubToken(args[i + 1]); break
     else:
       echo &"Unrecognized option {item}\n"
       displayHelp("config")

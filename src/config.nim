@@ -57,13 +57,14 @@ proc getWowDir(mode: Mode): string =
       searchPaths.add(knownDir)
   except:
     discard
-  searchPaths.add(getHomeDir())
   let dir = mode.dir()
   when defined(windows):
     let default = joinPath("C:", "Program Files (x86)", "World of Warcraft")
     if dirExists(default / dir):
       return default
-    root = "C:"
+    searchPaths.add("C:")
+  else:
+    searchPaths.add(getHomeDir())
   for root in searchPaths:
     for path in walkDirRec(root, yieldFilter = {pcDir}):
       if path.contains("World of Warcraft" / dir):
@@ -247,3 +248,21 @@ proc setBackup*(arg: string) =
     configData.backupDir = arg
     echo "Backup directory now ", dir
     echo "Existing backup files have been moved."
+
+proc setGithubToken*(token: string) =
+  configData = loadConfig()
+  configData.githubToken = token
+
+proc showConfig*() =
+  configData = loadConfig()
+  let mode = case configData.mode
+    of Retail: "Retail"
+    of Classic: "Classic"
+    of Vanilla: "Vanilla"
+    of None: "Error: No mode set"
+  echo &"Configuration for current mode: {mode}"
+  echo &"  Addons directory: {configData.installDir}"
+  echo &"  Backups enabled: {configData.backupEnabled}"
+  if configData.backupEnabled:
+    echo &"  Backups directory: {configData.backupDir}"
+  quit()

@@ -151,10 +151,10 @@ proc setVersion(addon: Addon, json: JsonNode) =
 proc getInvalidModeStrings(addon: Addon): seq[string] {.gcsafe.} =
   case addon.config.mode
   of Retail:
-    result = @["bcc", "tbc", "wotlk", "wotlkc", "wrath", "classic"]
+    result = @["bcc", "tbc", "wotlk", "wotlkc", "Classic", "classic"]
   of Vanilla:
-    result = @["mainline", "bcc", "tbc", "wotlk", "wotlkc", "wrath"]
-  of Wrath:
+    result = @["mainline", "bcc", "tbc", "wotlk", "wotlkc", "Classic"]
+  of Classic:
     result = @["mainline", "bcc", "tbc", "classic"]
   of None:
     discard
@@ -261,7 +261,7 @@ proc processTocs(path: string): bool =
       var (dir, name, ext) = splitFile(file)
       if ext == ".toc":
         if name != lastPathPart(dir):
-          let p = re("(.+?)(?:$|[-_](?i:mainline|wrath|tbc|vanilla|wotlkc?|bcc|classic))", flags = {reIgnoreCase})
+          let p = re("(.+?)(?:$|[-_](?i:mainline|Classic|tbc|vanilla|wotlkc?|bcc|classic))", flags = {reIgnoreCase})
           var m: array[2, string]
           discard find(cstring(name), p, m, 0, len(name))
           name = m[0]
@@ -358,7 +358,7 @@ proc curseGetProject(addon: Addon) {.gcsafe.} =
     let agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36"
     var options = %*{
       "excludeSwitches": ["enable-automation", "enable-logging"],
-      "args": ["-window-size=1024,800", &"--user-agent={agent}"]
+      "args": ["--window-size=1024,800", "--log-level=3", &"--user-agent={agent}"]
     }
     waitFor driver.startSession(options, headless = true)
     waitFor driver.setUrl(addon.project & "/download")
@@ -392,10 +392,10 @@ proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
   of Curse:
     var gameVersions: seq[string]
     var gameVersionNumber = case addon.config.mode
-    of Retail: "10."
-    of Vanilla: "1."
-    of Wrath: "3."
-    of None: ""
+      of Retail: "10."
+      of Vanilla: "1."
+      of Classic: "3."
+      of None: ""
     for i, data in enumerate(json["data"]):
       gameVersions.fromJson(data["gameVersions"])
       for num in gameVersions:
