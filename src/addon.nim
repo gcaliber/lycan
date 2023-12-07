@@ -49,7 +49,7 @@ proc getName*(addon: Addon): string =
   result = if not addon.name.isEmptyOrWhitespace: addon.name 
   else: $addon.kind & ':' & addon.project
 
-proc stateMessage*(addon: Addon) = 
+proc stateMessage*(addon: Addon, nameSpace, versionSpace: int) = 
   let 
     t = configData.term
     indent = 2
@@ -61,41 +61,41 @@ proc stateMessage*(addon: Addon) =
   case addon.state
   of Checking, Parsing:
     t.write(indent, addon.line, true, colors, style,
-      fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
+      fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", resetStyle)
   of Downloading, Installing, Restoring:
     t.write(indent, addon.line, true, colors, style,
-      fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
+      fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of FinishedUpdated, FinishedInstalled:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
+      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of FinishedAlreadyCurrent:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
+      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyVersion()}", resetStyle)
   of FinishedPinned:
     t.write(indent, addon.line, true, colors, style,
-      fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
+      fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       styleBright, fgRed, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", 
       if addon.version != addon.oldVersion: fgGreen else: fgYellow,
       &"{addon.prettyVersion()}", resetStyle)
   of Removed, Pinned:
     t.write(indent, addon.line, true, colors, style,
-      fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
+      fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Unpinned:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
+      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Restored:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
+      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Failed, NoBackup:
     t.write(indent, addon.line, true, colors, style,
-      fgRed, &"{$addon.state:<12}", fgWhite, &"{addon.getName():<36}",
+      fgRed, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Done, DoneFailed:
     discard

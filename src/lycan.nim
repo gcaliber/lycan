@@ -114,6 +114,9 @@ proc setup(args: seq[string]) =
   quit()
 
 proc processMessages(): seq[Addon] =
+  var nameSpace {.global.} = 0
+  var versionSpace {.global.} = 0
+  var addons {.global.}: seq[Addon]
   while true:
     let (ok, addon) = chan.tryRecv()
     if ok:
@@ -121,7 +124,12 @@ proc processMessages(): seq[Addon] =
       of Done, DoneFailed:
         result.add(addon)
       else:
-        addon.stateMessage()
+        addons = addons.filter(a => a != addon)
+        addons.add(addon)
+        nameSpace = if addon.name.len > nameSpace: addon.name.len + 2 else: nameSpace
+        versionSpace = if addon.name.len > versionSpace: addon.name.len + 2 else: versionSpace
+        for addon in addons:
+          addon.stateMessage(nameSpace, versionSpace)
     else:
       break
 
