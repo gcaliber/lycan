@@ -1,6 +1,5 @@
 import std/algorithm
 import std/asyncdispatch
-import std/colors
 import std/enumerate
 import std/httpclient
 import std/[json, jsonutils]
@@ -42,59 +41,53 @@ proc prettyOldVersion(addon: Addon): string =
   of GithubRepo: return addon.oldVersion[0 ..< 7]
   else: return addon.oldVersion
 
-const DARK_GREY: Color = Color(0x20_20_20)
-const LIGHT_GREY: Color = Color(0x34_34_34)
-
 proc getName*(addon: Addon): string =
   result = if not addon.name.isEmptyOrWhitespace: addon.name 
   else: $addon.kind & ':' & addon.project
 
-proc stateMessage*(addon: Addon, nameSpace, versionSpace: int) = 
+proc stateMessage*(addon: Addon, nameSpace: int) = 
   let 
     t = configData.term
     indent = 2
-    even = addon.line mod 2 == 0
     arrow = if addon.old_version.isEmptyOrWhitespace: "" else: "->"
-    colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
-    style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
   acquire(stdoutLock)
   case addon.state
   of Checking, Parsing:
-    t.write(indent, addon.line, true, colors, style,
+    t.write(indent, addon.line, true,
       fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", resetStyle)
   of Downloading, Installing, Restoring:
-    t.write(indent, addon.line, true, colors, style,
+    t.write(indent, addon.line, true,
       fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of FinishedUpdated, FinishedInstalled:
-    t.write(indent, addon.line, true, colors, style,
+    t.write(indent, addon.line, true,
       fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of FinishedAlreadyCurrent:
-    t.write(indent, addon.line, true, colors, style,
+    t.write(indent, addon.line, true,
       fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyVersion()}", resetStyle)
   of FinishedPinned:
-    t.write(indent, addon.line, true, colors, style,
+    t.write(indent, addon.line, true,
       fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       styleBright, fgRed, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", 
       if addon.version != addon.oldVersion: fgGreen else: fgYellow,
       &"{addon.prettyVersion()}", resetStyle)
   of Removed, Pinned:
-    t.write(indent, addon.line, true, colors, style,
+    t.write(indent, addon.line, true,
       fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Unpinned:
-    t.write(indent, addon.line, true, colors, style,
+    t.write(indent, addon.line, true,
       fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Restored:
-    t.write(indent, addon.line, true, colors, style,
+    t.write(indent, addon.line, true,
       fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Failed, NoBackup:
-    t.write(indent, addon.line, true, colors, style,
+    t.write(indent, addon.line, true,
       fgRed, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Done, DoneFailed:
@@ -465,16 +458,13 @@ proc list*(addons: var seq[Addon], sortByTime: bool = false) =
     versionSpace = addons[addons.map(a => a.version.len).maxIndex()].version.len + 2
   for addon in addons:
     let
-      even = addon.line mod 2 == 0
-      colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
-      style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
       kind = case addon.kind 
         of GithubRepo: "Github"
         else: $addon.kind      
       pin = if addon.pinned: "!" else: ""
       branch = if addon.branch.isSome: addon.branch.get() else: ""
       time = addon.time.format("MM/dd h:mm")
-    t.write(1, addon.line, true, colors, style,
+    t.write(1, addon.line, true,
       fgBlue, &"{addon.id:<3}",
       fgWhite, &"{addon.name.alignLeft(nameSpace)}",
       fgRed, pin,

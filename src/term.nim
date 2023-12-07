@@ -74,7 +74,6 @@ proc writeLine*(t: Term, x, y: int, erase: bool, s: string) =
 
 proc exitTerm(t: Term): proc() =
   return proc() =
-    # t.writeLine(0, t.yMax, false, "")
     resetAttributes()
     showCursor()
 
