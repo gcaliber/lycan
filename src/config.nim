@@ -184,7 +184,6 @@ proc loadConfig*(newMode: Mode = None, newPath: string = "", basic = false): Con
   result.local = local
 
   if basic: 
-    log("Basic configuration loaded", Info)
     return
 
   var addonJsonFile: string
