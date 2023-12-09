@@ -1,5 +1,4 @@
 import std/[json, jsonutils]
-import std/locks
 import std/options
 import std/os
 import std/[strformat, strutils]
@@ -9,11 +8,7 @@ import types
 import term
 
 var configData*: Config
-var chan*: Channel[Addon]
-var stdoutLock*: Lock
-var logLock*: Lock
-initLock(stdoutLock)
-initLock(logLock)
+var addonChannel*: Channel[Addon]
 
 proc fromJsonHook(a: var Addon, j: JsonNode) =
   var
@@ -50,6 +45,7 @@ proc parseInstalledAddons(filename: string): seq[Addon] =
 proc dir(mode: Mode): string =
   return '_' & $mode & '_'
 
+# TODO: for faster searching, try starting in cwd first
 proc getWowDir(mode: Mode, fast: bool = false): string =
   var searchPaths: seq[string]
   if not configData.isNil:
@@ -119,7 +115,7 @@ proc writeConfig*(config: Config) =
     createDir(path.parentDir())
   writeFile(path, pretty(json))
 
-proc loadConfig*(newMode: Mode = None, newPath: string = "", modeOnly = false): Config =
+proc loadConfig*(newMode: Mode = None, newPath: string = "", basic = false): Config =
   var 
     configJson: JsonNode
     local = false
@@ -162,12 +158,16 @@ proc loadConfig*(newMode: Mode = None, newPath: string = "", modeOnly = false): 
     except KeyError:
       modeExists = false
   else:
-    result.logLevel = Debug
+    result.logLevel = if defined(release): Fatal else: Debug
     mode = if newMode == None: Retail else: newMode
     result.mode = mode
     modeExists = false
 
-  if modeOnly: return
+  result.tempDir = getTempDir()
+  result.term = termInit()
+  result.local = local
+
+  if basic: return
 
   var addonJsonFile: string
   if modeExists:
@@ -206,9 +206,6 @@ proc loadConfig*(newMode: Mode = None, newPath: string = "", modeOnly = false): 
     result.githubToken = configJson["githubToken"].getStr()
   except:
     discard
-  result.tempDir = getTempDir()
-  result.term = termInit()
-  result.local = local
   if addonJsonFile != "":
     result.addons = parseInstalledAddons(addonJsonFile)
 
@@ -217,7 +214,7 @@ proc setPath*(path: string) =
   if not dirExists(normalPath):
     echo &"Error: Path provided does not exist:\n  {normalPath}"
     quit()
-  let mode = loadConfig(modeOnly = true).mode.dir()
+  let mode = configData.mode.dir()
   let addonDir = joinPath(normalPath, mode, "Interface", "AddOns")
   if not dirExists(addonDir):
     echo &"Error: Did not find {addonDir}"

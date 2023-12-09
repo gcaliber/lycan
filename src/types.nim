@@ -7,7 +7,11 @@ type
     Install, Update, Remove, List, Pin, Unpin, Restore, Setup, Empty, Help
 
   LogLevel* = enum
-    Off, Fatal, Warning, Info, Debug
+    Off = "OFF",
+    Fatal = "FATAL"
+    Warning = "WARN"
+    Info = "INFO"
+    Debug = "DEBUG"
 
   Mode* = enum
     Retail = "retail",
@@ -36,6 +40,11 @@ type
   
   AddonKind* = enum
     Github, GithubRepo, Gitlab, Tukui, Wowint, Curse
+
+  LogMessage* = ref object
+    level*: LogLevel
+    msg*: string
+    e*: ref Exception
 
   Config* = ref object
     mode*: Mode

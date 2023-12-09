@@ -7,4 +7,5 @@ src/test*
 test*
 lycan_backup*
 lycan.cfg
+lycan.log
 README.md

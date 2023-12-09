@@ -24,6 +24,7 @@ import config
 import help
 import term
 import types
+import logger
 
 const pollRate = 20
 
@@ -51,9 +52,9 @@ proc toJsonHook(a: Addon): JsonNode =
   result["time"] = %a.time.format("yyyy-MM-dd'T'HH:mm")
 
 proc writeAddons(addons: var seq[Addon]) =
-  addons.sort((a, z) => int(a.name.toLower() > z.name.toLower()))
-  let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
   if configData.addonJsonFile != "":
+    addons.sort((a, z) => int(a.name.toLower() > z.name.toLower()))
+    let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
     writeFile(configData.addonJsonFile, pretty(addonsJson))
 
 proc addonFromUrl(url: string): Option[Addon] =
@@ -117,7 +118,7 @@ proc processMessages(): seq[Addon] =
   var maxName {.global.} = 0
   var addons {.global.}: seq[Addon]
   while true:
-    let (ok, addon) = chan.tryRecv()
+    let (ok, addon) = addonChannel.tryRecv()
     if ok:
       case addon.state
       of Done, DoneFailed:
@@ -131,7 +132,22 @@ proc processMessages(): seq[Addon] =
     else:
       break
 
+proc processLog() =
+  while true:
+    let (ok, logMessage) = logChannel.tryRecv()
+    if ok:
+      if logMessage.level <= configData.logLevel:
+        log(logMessage)
+    else:
+      break
+
+
+
+
+
 proc main() =
+  configData = loadConfig(basic = true)
+  logInit(configData.logLevel)
   var opt = initOptParser(
     commandLineParams(), 
     shortNoVal = {'u', 'i', 'a'}, 
@@ -233,7 +249,7 @@ proc main() =
     else:
       displayHelp()
 
-  chan.open()
+  addonChannel.open()
   var thr = newSeq[Thread[Addon]](len = addons.len)
   for i, addon in enumerate(addons):
     addon.config = addr configData
@@ -242,6 +258,7 @@ proc main() =
   var processed, failed, success, rest, final: seq[Addon]
   while true:
     processed &= processMessages()
+    processLog()
     var runningCount = 0
     for t in thr:
       runningCount += int(t.running)
@@ -249,6 +266,7 @@ proc main() =
       break
     sleep(pollRate)
   
+  processLog()
   processed &= processMessages()
   thr.joinThreads()
   

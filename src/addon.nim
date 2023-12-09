@@ -20,6 +20,7 @@ import webdriver/chromedriver
 import config
 import types
 import term
+import logger
 
 proc `==`*(a, b: Addon): bool {.inline.} =
   a.project == b.project
@@ -101,11 +102,18 @@ proc stateMessage*(addon: Addon, nameSpace: int) =
     discard
   release(stdoutLock)
 
-proc setAddonState(addon: Addon, state: AddonState, err: string = "") =
+proc setAddonState(addon: Addon, state: AddonState, loggedMsg: string, level: LogLevel = Info) =
   if addon.state != Failed:
     addon.state = state
-    addon.errorMsg = err
-  chan.send(addon)
+  logChannel.send(LogMessage(level: level, msg: loggedMsg, e: nil))
+  addonChannel.send(addon)
+
+proc setAddonState(addon: Addon, state: AddonState, errorMsg: string, loggedMsg: string, e: ref Exception = nil, level: LogLevel = Fatal) =
+  # if addon.state != Failed:
+  addon.state = state
+  addon.errorMsg = errorMsg
+  logChannel.send(LogMessage(level: level, msg: loggedMsg, e: e))
+  addonChannel.send(addon)
 
 proc setName(addon: Addon, json: JsonNode, name: string = "none") =
   if addon.state == Failed: return
@@ -148,7 +156,7 @@ proc setVersion(addon: Addon, json: JsonNode) =
   of Wowint:
     addon.version = json[0]["UIVersion"].getStr()
 
-proc getInvalidModeStrings(addon: Addon): seq[string] {.gcsafe.} =
+proc getInvalidModeStrings(addon: Addon): seq[string] =
   case addon.config.mode
   of Retail:
     result = @["bcc", "tbc", "wotlk", "wotlkc", "Classic", "classic"]
@@ -159,7 +167,7 @@ proc getInvalidModeStrings(addon: Addon): seq[string] {.gcsafe.} =
   of None:
     discard
 
-proc setDownloadUrl(addon: Addon, json: JsonNode) {.gcsafe.} =
+proc setDownloadUrl(addon: Addon, json: JsonNode) =
   if addon.state == Failed: return
   case addon.kind
   of Curse:
@@ -219,7 +227,7 @@ proc getLatest(addon: Addon): Response =
   let client = newHttpClient(headers = headers)
   return client.get(url)
 
-proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
+proc download(addon: Addon, json: JsonNode) =
   if addon.state == Failed: return
   var headers = newHttpHeaders()
   case addon.kind
@@ -231,7 +239,8 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   let client = newHttpClient(headers = headers)
   let response = client.get(addon.downloadUrl)
   if not response.status.contains("200"):
-    addon.setAddonState(Failed, err = &"While downloading got response {response.status}: {addon.getLatestUrl()}")
+    addon.setAddonState(Failed, &"Bad response downloading {response.status}: {addon.getLatestUrl()}",
+    &"{addon.name} download failed. Response code {response.status} from {addon.getLatestUrl()}")
     return
   var downloadName: string
   case addon.kind:
@@ -246,13 +255,13 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   var file: File
   try:
     file = open(addon.filename, fmWrite)
-  except CatchableError as e:
-    addon.setAddonState(Failed, &"Problem opening file {addon.filename}")
+  except Exception as e:
+    addon.setAddonState(Failed, &"Problem opening file {addon.filename}", &"download failed, error opening file {addon.filename}", e)
     return
   try:
     system.write(file, response.body)
-  except:
-    addon.setAddonState(Failed, &"Problem encountered while downloading.")
+  except Exception as e:
+    addon.setAddonState(Failed, &"Problem encountered while downloading.", &"download failed, error writing {addon.filename}", e)
   close(file)
 
 proc processTocs(path: string): bool =
@@ -283,7 +292,7 @@ proc getAddonDirs(addon: Addon): seq[string] =
       else: return collect(for kind, dir in walkDir(parentDir(current)): (if kind == pcDir: dir))
     firstPass = false
 
-proc getBackupFiles(addon: Addon): seq[string] {.gcsafe.} = 
+proc getBackupFiles(addon: Addon): seq[string] = 
   var name = $addon.kind & addon.project
   for c in invalidFilenameChars:
     name = name.replace(c, '-')
@@ -311,7 +320,7 @@ proc setIdAndCleanup(addon: Addon) =
       a.removeAddonFiles(removeAllBackups = false)
       break
 
-proc moveDirs(addon: Addon) {.gcsafe.} =
+proc moveDirs(addon: Addon) =
   if addon.state == Failed: return
   var source = addon.getAddonDirs()
   source.sort()
@@ -323,10 +332,10 @@ proc moveDirs(addon: Addon) {.gcsafe.} =
     let destination = addon.config.installDir / name
     try:
       moveDir(dir, destination)
-    except CatchableError as e:
-      addon.setAddonState(Failed, "Problem Pmoving Addon directories.")
+    except Exception as e:
+      addon.setAddonState(Failed, "Problem moving Addon directories.", &"{addon.name} move directories error", e)
 
-proc createBackup(addon: Addon) {.gcsafe.} =
+proc createBackup(addon: Addon) =
   if addon.state == Failed: return
   let backups = getBackupFiles(addon)
   var name = $addon.kind & addon.project & "&V=" & addon.version & ".zip"
@@ -337,22 +346,22 @@ proc createBackup(addon: Addon) {.gcsafe.} =
     removeFile(backups[0])
   try:
     moveFile(addon.filename, addon.config.backupDir / name)
-  except CatchableError as e:
-    addon.setAddonState(Failed, "Problem creating backup files.")
+  except Exception as e:
+    addon.setAddonState(Failed, "Problem creating backup files.", &"{addon.name} create backup error", e)
     discard
 
-proc unzip(addon: Addon) {.gcsafe.} =
+proc unzip(addon: Addon) =
   if addon.state == Failed: return
   let (_, name, _) = splitFile(addon.filename)
   addon.extractDir = addon.config.tempDir / name
   removeDir(addon.extractDir)
   try:
     extractAll(addon.filename, addon.extractDir)
-  except CatchableError as e:
-    addon.setAddonState(Failed, "Problem unzipping files.")
+  except Exception as e:
+    addon.setAddonState(Failed, "Problem unzipping files.", &"{addon.name} unzip error", e)
     discard
 
-proc curseGetProject(addon: Addon) {.gcsafe.} =
+proc curseGetProject(addon: Addon) =
   try:
     var driver = newChromeDriver()
     let agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36"
@@ -372,22 +381,24 @@ proc curseGetProject(addon: Addon) {.gcsafe.} =
 
     waitFor driver.deleteSession()
     waitFor driver.close()
-  except CatchableError as e:
-    addon.setAddonState(Failed, &"{e.name}: {e.msg}")
+  except Exception as e:
     if e.name == $OSError and e.msg.startsWith("The parameter is incorrect"):
-      addon.setAddonState(Failed, &"Unable to launch chromedriver. This must be installed in order to use addons from curseforge.\n    For more details: lycan --help webdriver")
+      addon.setAddonState(Failed, &"Unable to launch chromedriver. It must be installed in order to use addons from curseforge.\n    For more details: lycan --help webdriver",
+      "Error launching chromedriver", e)
     else:
-      addon.setAddonState(Failed, &"{e.name}: {e.msg}")
-  except:
-    addon.setAddonState(Failed, &"Unknown error. Try again and if the problem persists open an issue at https://github.com/inverimus/lycan")
+      addon.setAddonState(Failed, &"{e.name}: {e.msg}", &"Error getting curseforge project for {addon.project}.", e)
 
-proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
+proc getLatestJson(addon: Addon): JsonNode =
   var json: JsonNode
   let response = addon.getLatest()
   if not response.status.contains("200"):
-    addon.setAddonState(Failed, err = &"Response while retrieving latest addon info {response.status}: {addon.getLatestUrl()}")
+    addon.setAddonState(Failed, &"Bad response retrieving latest addon info - {response.status}: {addon.getLatestUrl()}",
+    &"Get latest JSON bad response: {response.status}")
     return
-  json = parseJson(response.body)
+  try:
+    json = parseJson(response.body)
+  except Exception as e:
+    addon.setAddonState(Failed, "JSON parsing error.", &"JSON Error: {addon.name} Unable to parse json.", e)
   case addon.kind:
   of Curse:
     var gameVersions: seq[string]
@@ -401,55 +412,56 @@ proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
       for num in gameVersions:
         if num.startsWith(gameVersionNumber):
           return json["data"][i]
-    addon.setAddonState(Failed, &"JSON Error: No game version matches current mode of {addon.config.mode}.")
+    addon.setAddonState(Failed, &"JSON Error: No game version matches current mode of {addon.config.mode}.",
+    &"JSON Error: {addon.name} no game version matches current mode of {addon.config.mode}.")
   of Tukui:
     for data in json:
       if data["slug"].getStr() == addon.project:
         return data
-    addon.setAddonState(Failed, "JSON Error: Addon not found.")
+    addon.setAddonState(Failed, "JSON Error: Addon not found.", &"JSON Error: {addon.name} not found.")
     return
   else:
     discard
   return json
 
-proc install*(addon: Addon) {.gcsafe.} =
-  addon.setAddonState(Checking)
+proc install*(addon: Addon) =
+  addon.setAddonState(Checking, &"Checking: {addon.getName()} getting latest version information")
   if addon.kind == Curse and addon.project.startsWith("https://"):
     addon.curseGetProject()
   let json = addon.getLatestJson()
-  addon.setAddonState(Parsing)
+  addon.setAddonState(Parsing, &"Parsing: {addon.getName()} JSON for latest version")
   addon.setVersion(json)
   if addon.pinned:
-    addon.setAddonState(FinishedPinned)
+    addon.setAddonState(FinishedPinned, &"Finished: {addon.getName()} not updated, pinned to version {addon.version}")
     return
   if addon.version != addon.oldVersion:
     addon.time = now()
     addon.setDownloadUrl(json)
     addon.setName(json)
-    addon.setAddonState(Downloading)
+    addon.setAddonState(Downloading, &"Downloading: {addon.getName()}")
     addon.download(json)
-    addon.setAddonState(Installing)
+    addon.setAddonState(Installing, &"Installing: {addon.getName()}")
     addon.unzip()
     addon.createBackup()
     addon.moveDirs()
     if addon.oldVersion.isEmptyOrWhitespace:
-      addon.setAddonState(FinishedInstalled)
+      addon.setAddonState(FinishedInstalled, &"Installed: {addon.getName()} installed at version {addon.version}")
     else:
-      addon.setAddonState(FinishedUpdated)
+      addon.setAddonState(FinishedUpdated, &"Updated: {addon.getName()} updated from {addon.oldVersion} to {addon.version}")
   else:
-    addon.setAddonState(FinishedAlreadyCurrent)
+    addon.setAddonState(FinishedAlreadyCurrent, &"Finished: {addon.getName()} already up to date.")
 
 proc uninstall*(addon: Addon) =
   addon.removeAddonFiles(removeAllBackups = true)
-  addon.setAddonState(Removed)
+  addon.setAddonState(Removed, &"Removed: {addon.getName()}")
 
 proc pin*(addon: Addon) =
   addon.pinned = true
-  addon.setAddonState(Pinned)
+  addon.setAddonState(Pinned, &"Pinned: {addon.getName()} pinned to version {addon.version}")
 
 proc unpin*(addon: Addon) =
   addon.pinned = false
-  addon.setAddonState(Unpinned)
+  addon.setAddonState(Unpinned, &"Unpinned: {addon.getName()}")
 
 proc list*(addons: var seq[Addon], sortByTime: bool = false) =
   if sortByTime:
@@ -488,10 +500,10 @@ proc list*(addons: var seq[Addon], sortByTime: bool = false) =
   quit()
 
 proc restore*(addon: Addon) =
-  addon.setAddonState(Restoring)
+  addon.setAddonState(Restoring, &"Restoring: {addon.getName()}")
   var backups = getBackupFiles(addon)
   if len(backups) < 2:
-    addon.setAddonState(NoBackup)
+    addon.setAddonState(NoBackup, &"Restoring Error: {addon.getName()} has no backups to restore")
     return
   let filename = backups[0]
   let start = filename.find("&V=") + 3
@@ -501,7 +513,7 @@ proc restore*(addon: Addon) =
   addon.time = getFileInfo(filename).creationTime.local()
   addon.unzip()
   addon.moveDirs()
-  addon.setAddonState(Restored)
+  addon.setAddonState(Restored, &"Restore Finished: {addon.getName()}")
   if addon.state != Failed:
     removeFile(backups[1])
 
@@ -517,4 +529,4 @@ proc workQueue*(addon: Addon) {.thread.} =
     addon.state = DoneFailed
   else:
     addon.state = Done
-  chan.send(addon)
+  addonChannel.send(addon)
