@@ -61,6 +61,8 @@ proc writeAddons(addons: var seq[Addon]) =
     except Exception as e:
       log(&"Fatal error writing installed addons file: {configData.addonJsonFile}", Fatal, e)
 
+# https://www.curseforge.com/api/v1/mods/334372/files/4938964/download
+
 proc addonFromUrl(url: string): Option[Addon] =
   var urlmatch: array[2, string]
   let pattern = re"^(?:https?://)?(?:www\.)?(.+)\.(?:com|org)/(.+[^/\n])"
@@ -69,7 +71,10 @@ proc addonFromUrl(url: string): Option[Addon] =
     return none(Addon)
   case urlmatch[0].toLower()
     of "curseforge":
-      return some(newAddon(url, Curse))
+      var m: array[1, string]
+      let pattern = re"\/mods\/(\d+)\/"
+      discard find(cstring(urlmatch[1]), pattern, m, 0, len(urlmatch[1]))
+      return some(newAddon(m[0], Curse))
     of "github":
       let p = re"^(.+?/.+?)(?:/|$)(?:tree/)?(.+)?"
       var m: array[2, string]

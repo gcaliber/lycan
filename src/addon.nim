@@ -1,5 +1,4 @@
 import std/algorithm
-import std/asyncdispatch
 import std/colors
 import std/enumerate
 import std/httpclient
@@ -15,7 +14,6 @@ import std/terminal
 import std/times
 
 import zippy/ziparchives
-import webdriver/chromedriver
 
 import config
 import types
@@ -361,33 +359,6 @@ proc unzip(addon: Addon) =
     addon.setAddonState(Failed, "Problem unzipping files.", &"{addon.name} unzip error", e)
     discard
 
-proc curseGetProject(addon: Addon) =
-  try:
-    var driver = newChromeDriver()
-    let agent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_13_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36"
-    var options = %*{
-      "excludeSwitches": ["enable-automation", "enable-logging"],
-      "args": ["--window-size=1024,800", "--log-level=3", &"--user-agent={agent}"]
-    }
-    waitFor driver.startSession(options, headless = true)
-    waitFor driver.setUrl(addon.project & "/download")
-
-    var element = waitFor driver.waitElement(xPath, "/html/body/div/main/div[3]/div[1]/p/a")
-    let href = waitFor driver.getElementAttribute(element, "href")
-    var match: array[1, string]
-    let pattern = re"\/mods\/(\d+)\/"
-    discard find(cstring(href), pattern, match, 0, len(href))
-    addon.project = match[0]
-
-    waitFor driver.deleteSession()
-    waitFor driver.close()
-  except Exception as e:
-    if e.name == $OSError and e.msg.startsWith("The parameter is incorrect"):
-      addon.setAddonState(Failed, &"Unable to launch chromedriver. It must be installed in order to use addons from curseforge.\n    For more details: lycan --help webdriver",
-      "Error launching chromedriver", e)
-    else:
-      addon.setAddonState(Failed, &"{e.name}: {e.msg}", &"Error getting curseforge project for {addon.project}.", e)
-
 proc getLatestJson(addon: Addon): JsonNode =
   var json: JsonNode
   let response = addon.getLatest()
@@ -426,8 +397,6 @@ proc getLatestJson(addon: Addon): JsonNode =
 
 proc install*(addon: Addon) =
   addon.setAddonState(Checking, &"Checking: {addon.getName()} getting latest version information")
-  if addon.kind == Curse and addon.project.startsWith("https://"):
-    addon.curseGetProject()
   let json = addon.getLatestJson()
   addon.setAddonState(Parsing, &"Parsing: {addon.getName()} JSON for latest version")
   addon.setVersion(json)
