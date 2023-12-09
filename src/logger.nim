@@ -26,7 +26,7 @@ proc writeLog(msg: string) =
   logFile.write(msg)
   release(logLock)
 
-proc log(msg: string, level: LogLevel) =
+proc log*(msg: string, level: LogLevel) =
     var loggedMessage: string
     case logLevel:
     of Debug, Fatal, Warning, Info:
@@ -34,7 +34,7 @@ proc log(msg: string, level: LogLevel) =
     of Off: discard
     writeLog(loggedMessage)
 
-proc log(msg: string, level: LogLevel, e: ref Exception) =
+proc log*(msg: string, level: LogLevel, e: ref Exception) =
     var loggedMessage: string
     case logLevel:
     of Debug:

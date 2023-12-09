@@ -6,6 +6,7 @@ import std/times
 
 import types
 import term
+import logger
 
 var configData*: Config
 var addonChannel*: Channel[Addon]
@@ -36,7 +37,13 @@ proc fromJsonHook(a: var Addon, j: JsonNode) =
 
 proc parseInstalledAddons(filename: string): seq[Addon] =
   if not fileExists(filename): return @[]
-  let addonsJson = parseJson(readFile(filename))
+  var addonsJson: JsonNode
+  try:
+    addonsJson = parseJson(readFile(filename))
+  except Exception as e:
+    echo &"Fatal error parsing installed addons file: {filename}"
+    log(&"Fatal error parsing installed addons file: {filename}", Fatal, e)
+    quit()
   for addon in addonsJson:
     var a = new(Addon)
     a.fromJson(addon)
@@ -47,12 +54,14 @@ proc dir(mode: Mode): string =
 
 # TODO: for faster searching, try starting in cwd first
 proc getWowDir(mode: Mode, fast: bool = false): string =
+  log("Starting search for World of Warcraft install location", Info)
   var searchPaths: seq[string]
   if not configData.isNil:
     let knownDir = configData.installDir.parentDir().parentDir().parentDir()
     if knownDir != "":
       searchPaths.add(knownDir)
   let dir = mode.dir()
+  searchPaths.add(getCurrentDir())
   if not fast:
     when defined(windows):
       let default = joinPath("C:", "Program Files (x86)", "World of Warcraft")
@@ -62,12 +71,15 @@ proc getWowDir(mode: Mode, fast: bool = false): string =
     else:
       searchPaths.add(getHomeDir())
   for root in searchPaths:
+    log(&"Searching subdirecties for World of Warcraft starting in {root}", Info)
     for path in walkDirRec(root, yieldFilter = {pcDir}):
       if path.contains("World of Warcraft" / dir):
         var wow = path
         while not wow.endsWith("World of Warcraft"):
           wow = parentDir(wow)
+        log(&"Found World of Warcraft directory: {wow}.", Info)
         return wow
+  log("Unable to find World of Warcraft directory", Info)
   return ""
 
 let 
@@ -113,7 +125,11 @@ proc writeConfig*(config: Config) =
           json[$mode]["backupDir"] = %""
   if not dirExists(path.parentDir()):
     createDir(path.parentDir())
-  writeFile(path, pretty(json))
+  try:
+    writeFile(path, pretty(json))
+    log(&"Configuration file saved: {path}", Info)
+  except Exception as e:
+    log(&"Fatal error writing: {path}", Fatal, e)
 
 proc loadConfig*(newMode: Mode = None, newPath: string = "", basic = false): Config =
   var 
@@ -167,7 +183,9 @@ proc loadConfig*(newMode: Mode = None, newPath: string = "", basic = false): Con
   result.term = termInit()
   result.local = local
 
-  if basic: return
+  if basic: 
+    log("Basic configuration loaded", Info)
+    return
 
   var addonJsonFile: string
   if modeExists:
@@ -208,6 +226,7 @@ proc loadConfig*(newMode: Mode = None, newPath: string = "", basic = false): Con
     discard
   if addonJsonFile != "":
     result.addons = parseInstalledAddons(addonJsonFile)
+  log("Configuration loaded", Info)
 
 proc setPath*(path: string) =
   let normalPath = path.strip(chars = {'\'', '"'}).normalizePathEnd()
@@ -220,6 +239,7 @@ proc setPath*(path: string) =
     echo &"Error: Did not find {addonDir}"
     echo "Make sure you are in the correct mode and that World of Warcraft has been started at least once."
     quit()
+  log(&"Path: {normalPath} set as location for {$mode} mode", Info)
   configData = loadConfig(newPath = normalPath)
 
 proc setMode*(mode: string) =
@@ -235,6 +255,7 @@ proc setMode*(mode: string) =
     echo "  retail, r    Most recent retail expansion"
     echo "  classic, c   Wrath of the Lich King Classic"
     echo "  vanilla, v   Vanilla era Classic"
+  log(&"Mode changed: {$mode}", Info)
   configData = loadConfig(configData.mode)
 
 proc setBackup*(arg: string) =
@@ -242,8 +263,10 @@ proc setBackup*(arg: string) =
   case arg.toLower()
   of "y", "yes", "on", "enable", "enabled", "true":
     configData.backupEnabled = true
+    log(&"Backup enabled for {configData.mode}", Info)
   of "n", "no", "off", "disable", "disabled", "false":
     configData.backupEnabled = false
+    log(&"Backup disabled for {configData.mode}", Info)
   else:
     let dir = arg.strip(chars = {'\'', '"'}).normalizePathEnd()
     if not dirExists(dir):
@@ -254,12 +277,14 @@ proc setBackup*(arg: string) =
       if kind == pcFile:
         moveFile(path, arg / lastPathPart(path))
     configData.backupDir = arg
+    log(&"New backup directory set: {dir}", Info)
     echo "Backup directory now ", dir
     echo "Existing backup files have been moved."
 
 proc setGithubToken*(token: string) =
   configData = loadConfig()
   configData.githubToken = token
+  log(&"Github token set to: {token}", Info)
 
 proc showConfig*() =
   configData = loadConfig()
