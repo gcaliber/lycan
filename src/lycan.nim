@@ -55,7 +55,10 @@ proc writeAddons(addons: var seq[Addon]) =
   if configData.addonJsonFile != "":
     addons.sort((a, z) => int(a.name.toLower() > z.name.toLower()))
     let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
-    writeFile(configData.addonJsonFile, pretty(addonsJson))
+    try:
+      writeFile(configData.addonJsonFile, pretty(addonsJson))
+    except Exception as e:
+      log(&"Fatal error writing installed addons file: {configData.addonJsonFile}", Fatal, e)
 
 proc addonFromUrl(url: string): Option[Addon] =
   var urlmatch: array[2, string]
