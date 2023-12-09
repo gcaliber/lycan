@@ -19,7 +19,7 @@ proc logInit*(level: LogLevel) =
     initLock(logLock)
 
 proc time(): string =
-  return now().format("HH:mm:ss'.'ffffff")
+  return now().format("HH:mm:ss'.'fff")
 
 proc writeLog(msg: string) =
   acquire(logLock)
