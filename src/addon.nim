@@ -164,6 +164,22 @@ proc getInvalidModeStrings(addon: Addon): seq[string] {.gcsafe.} =
   of None:
     discard
 
+proc getLatestUrl(addon: Addon): string {.gcsafe.} =
+  case addon.kind
+  of Curse:
+    return &"https://www.curseforge.com/api/v1/mods/{addon.project}/files"
+  of Github:
+    return &"https://api.github.com/repos/{addon.project}/releases/latest"
+  of Gitlab:
+    let urlEncodedProject = addon.project.replace("/", "%2F")
+    return &"https://gitlab.com/api/v4/projects/{urlEncodedProject}/releases"
+  of Tukui:
+    return "https://api.tukui.org/v1/addons/"
+  of Wowint:
+    return &"https://api.mmoui.com/v3/game/WOW/filedetails/{addon.project}.json"
+  of GithubRepo:
+    return &"https://api.github.com/repos/{addon.project}/commits/{addon.branch.get}"
+
 proc setDownloadUrl(addon: Addon, json: JsonNode) {.gcsafe.} =
   if addon.state == Failed: return
   case addon.kind
@@ -301,6 +317,7 @@ proc moveDirs(addon: Addon) {.gcsafe.} =
       moveDir(dir, destination)
     except Exception as e:
       addon.setAddonState(Failed, "Problem moving Addon directories.", &"{addon.name} move directories error", e)
+  log(&"{addon.name}: Files moved to to install directory.", Info)
 
 proc createBackup(addon: Addon) {.gcsafe.} =
   if addon.state == Failed: return
@@ -313,8 +330,9 @@ proc createBackup(addon: Addon) {.gcsafe.} =
     removeFile(backups[0])
   try:
     moveFile(addon.filename, addon.config.backupDir / name)
+    log(&"{addon.name}: Backup created {addon.config.backupDir / name}", Info)
   except Exception as e:
-    addon.setAddonState(Failed, "Problem creating backup files.", &"{addon.name} create backup error", e)
+    addon.setAddonState(Failed, "Problem creating backup files.", &"{addon.name}: create backup error", e)
     discard
 
 proc unzip(addon: Addon) {.gcsafe.} =
@@ -324,25 +342,10 @@ proc unzip(addon: Addon) {.gcsafe.} =
   removeDir(addon.extractDir)
   try:
     extractAll(addon.filename, addon.extractDir)
+    log(&"{addon.name}: Extracted {addon.filename}", Info)
   except Exception as e:
-    addon.setAddonState(Failed, "Problem unzipping files.", &"{addon.name} unzip error", e)
+    addon.setAddonState(Failed, "Problem unzipping files.", &"{addon.name}: unzip error", e)
     discard
-
-proc getLatestUrl(addon: Addon): string {.gcsafe.} =
-  case addon.kind
-  of Curse:
-    return &"https://www.curseforge.com/api/v1/mods/{addon.project}/files"
-  of Github:
-    return &"https://api.github.com/repos/{addon.project}/releases/latest"
-  of Gitlab:
-    let urlEncodedProject = addon.project.replace("/", "%2F")
-    return &"https://gitlab.com/api/v4/projects/{urlEncodedProject}/releases"
-  of Tukui:
-    return "https://api.tukui.org/v1/addons/"
-  of Wowint:
-    return &"https://api.mmoui.com/v3/game/WOW/filedetails/{addon.project}.json"
-  of GithubRepo:
-    return &"https://api.github.com/repos/{addon.project}/commits/{addon.branch.get}"
 
 proc getLatest(addon: Addon): Response {.gcsafe.} =
   let url = addon.getLatestUrl()
