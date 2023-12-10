@@ -5,11 +5,9 @@
 
 # https://www.tukui.org/elvui https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/woblight/actionmirroringframe https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
 
-# https://github.com/p3lim-wow/QuickQuest https://www.tukui.org/elvui https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html https://gitlab.com/woblight/actionmirroringframe
+# https://github.com/Tercioo/Plater-Nameplates/tree/master https://www.tukui.org/elvui https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html https://gitlab.com/woblight/actionmirroringframe
 
-import std/algorithm
 import std/enumerate
-import std/[json, jsonutils]
 import std/options
 import std/[os, parseopt]
 import std/re
@@ -17,7 +15,6 @@ import std/sequtils
 import std/[strformat, strutils]
 import std/sugar
 import std/terminal
-import std/times
 
 import addon
 import config
@@ -27,39 +24,6 @@ import types
 import logger
 
 const pollRate = 20
-
-proc assignIds(addons: seq[Addon]) =
-  var ids: set[int16]
-  addons.apply((a: Addon) => ids.incl(a.id))
-
-  var id: int16 = 1
-  for a in addons:
-    if a.id == 0:
-      while id in ids: id += 1
-      a.id = id
-      incl(ids, id)
-
-proc toJsonHook(a: Addon): JsonNode =
-  result = newJObject()
-  result["project"] = %a.project
-  if a.branch.isSome(): result["branch"] = %a.branch.get()
-  result["name"] = %a.name
-  result["kind"] = %a.kind
-  result["version"] = %a.version
-  result["id"] = %a.id
-  result["pinned"] = %a.pinned
-  result["dirs"] = %a.dirs
-  result["time"] = %a.time.format("yyyy-MM-dd'T'HH:mm")
-
-proc writeAddons(addons: var seq[Addon]) =
-  if configData.addonJsonFile != "":
-    addons.sort((a, z) => int(a.name.toLower() > z.name.toLower()))
-    let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
-    try:
-      writeFile(configData.addonJsonFile, pretty(addonsJson))
-      log(&"Installed addons file saved: {configData.addonJsonFile}", Info)
-    except Exception as e:
-      log(&"Fatal error writing installed addons file: {configData.addonJsonFile}", Fatal, e)
 
 proc addonFromUrl(url: string): Option[Addon] =
   var urlmatch: array[2, string]
