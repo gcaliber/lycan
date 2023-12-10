@@ -349,7 +349,7 @@ proc moveDirs(addon: Addon) {.gcsafe.} =
       moveDir(dir, destination)
     except Exception as e:
       addon.setAddonState(Failed, "Problem moving Addon directories.", &"{addon.name} move directories error", e)
-  log(&"{addon.name}: Files moved to to install directory.", Info)
+  log(&"{addon.name}: Files moved to install directory.", Info)
 
 proc createBackup(addon: Addon) {.gcsafe.} =
   if addon.state == Failed: return
@@ -380,6 +380,7 @@ proc unzip(addon: Addon) {.gcsafe.} =
     discard
 
 proc getLatest(addon: Addon): Response {.gcsafe.} =
+  addon.setAddonState(Checking, &"Checking: {addon.getName()} getting latest version information")
   let url = addon.getLatestUrl()
   var headers = newHttpHeaders()
   case addon.kind
@@ -398,8 +399,16 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
     else:
       retryCount += 1
     if retryCount > 4:
-      addon.setAddonState(Failed, &"Bad response retrieving latest addon info - {response.status}: {addon.getLatestUrl()}",
-      &"Get latest JSON bad response: {response.status}")
+      if addon.kind == Github and response.status.contains("404"):
+        # https://api.github.com/repos/Boboseb/FloTotemBar/branches
+        # We could get this json instead and choose master or main if it exists, otherwise just fail and give a proper error
+        log(&"Got {response.status}: {addon.getLatestUrl()} - This usually means no releases are available so switching to trying master branch.", Warning)
+        addon.kind = GithubRepo
+        addon.branch = some("master")
+        return addon.getLatest()
+      else:
+        addon.setAddonState(Failed, &"Bad response retrieving latest addon info - {response.status}: {addon.getLatestUrl()}",
+        &"Get latest JSON bad response: {response.status}")
       return
     sleep(100)
 
@@ -437,7 +446,6 @@ proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
   return json
 
 proc install*(addon: Addon) {.gcsafe.} =
-  addon.setAddonState(Checking, &"Checking: {addon.getName()} getting latest version information")
   let json = addon.getLatestJson()
   addon.setAddonState(Parsing, &"Parsing: {addon.getName()} JSON for latest version")
   addon.setVersion(json)
