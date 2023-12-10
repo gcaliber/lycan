@@ -104,14 +104,13 @@ proc setAddonState(addon: Addon, state: AddonState, loggedMsg: string, level: Lo
   if addon.state != Failed:
     addon.state = state
   logChannel.send(LogMessage(level: level, msg: loggedMsg, e: nil))
-  addonChannel.send(addon)
+  addonChannel.send(addon.deepCopy())
 
 proc setAddonState(addon: Addon, state: AddonState, errorMsg: string, loggedMsg: string, e: ref Exception = nil, level: LogLevel = Fatal) {.gcsafe.} =
-  # if addon.state != Failed:
   addon.state = state
   addon.errorMsg = errorMsg
   logChannel.send(LogMessage(level: level, msg: loggedMsg, e: e))
-  addonChannel.send(addon)
+  addonChannel.send(addon.deepCopy())
 
 proc setName(addon: Addon, json: JsonNode, name: string = "none") {.gcsafe.} =
   if addon.state == Failed: return
@@ -487,7 +486,7 @@ proc restore*(addon: Addon) =
     removeFile(backups[1])
 
 proc workQueue*(addon: Addon) {.thread.} =
-  case addon.action:
+  case addon.action
   of Install: addon.install()
   of Remove:  addon.uninstall()
   of Pin:     addon.pin()
