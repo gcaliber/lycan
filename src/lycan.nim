@@ -274,7 +274,7 @@ proc main() =
     if runningCount == 0:
       break
     sleep(pollRate)
-  
+
   processLog()
   processed &= processMessages()
   thr.joinThreads()

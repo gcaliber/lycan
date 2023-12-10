@@ -1,4 +1,3 @@
-import std/json
 import std/options
 import std/times
 
@@ -14,10 +13,10 @@ type
     Debug = "DEBUG"
 
   Mode* = enum
-    Retail = "retail",
-    Vanilla = "classic_era",
-    Classic = "classic"
-    None = "",
+    Retail = "Retail",
+    Vanilla = "Vanilla",
+    Classic = "Classic",
+    None = "None"
 
   AddonState* = enum
     Checking = "Checking",
@@ -53,7 +52,6 @@ type
     backupEnabled*: bool
     backupDir*: string
     addonJsonFile*: string
-    tukuiCache*: JsonNode
     addons*: seq[Addon]
     term*: Term
     local*: bool

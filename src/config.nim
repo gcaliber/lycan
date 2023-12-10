@@ -50,9 +50,12 @@ proc parseInstalledAddons(filename: string): seq[Addon] =
     result.add(a)
 
 proc dir(mode: Mode): string =
-  return '_' & $mode & '_'
+  return case mode
+  of Retail: "_retail_"
+  of Vanilla: "_classic_era_"
+  of Classic: "_classic_"
+  of None: ""
 
-# TODO: for faster searching, try starting in cwd first
 proc getWowDir(mode: Mode, fast: bool = false): string =
   log("Starting search for World of Warcraft install location", Info)
   var searchPaths: seq[string]
@@ -176,9 +179,9 @@ proc loadConfig*(newMode: Mode = None, newPath: string = "", basic = false): Con
   else:
     result.logLevel = if defined(release): Fatal else: Debug
     mode = if newMode == None: Retail else: newMode
-    result.mode = mode
     modeExists = false
 
+  result.mode = mode
   result.tempDir = getTempDir()
   result.term = termInit()
   result.local = local
@@ -194,6 +197,9 @@ proc loadConfig*(newMode: Mode = None, newPath: string = "", basic = false): Con
     result.backupEnabled = settings["backupEnabled"].getBool()
     result.backupDir = settings["backupDir"].getStr()
   else:
+    result.backupEnabled = true
+    if newMode != None:
+      return
     var wowPath: string
     if newPath != "": 
       wowPath = newPath
@@ -212,7 +218,6 @@ proc loadConfig*(newMode: Mode = None, newPath: string = "", basic = false): Con
     let addonsPath = joinPath(wowPath, dir, "Interface", "AddOns")
     if not dirExists(addonsPath):
       echo &"Found a WoW directory: {wowPath}\nNo AddOns directory was found. Make sure you have started WoW at least once."
-    result.backupEnabled = true
     if wowPath != "":
       addonJsonFile = joinPath(wowPath, dir, "WTF", "lycan_addons.json")
       result.installDir = addonsPath
