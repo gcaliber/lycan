@@ -61,20 +61,21 @@ proc writeAddons(addons: var seq[Addon]) =
     except Exception as e:
       log(&"Fatal error writing installed addons file: {configData.addonJsonFile}", Fatal, e)
 
-# https://www.curseforge.com/api/v1/mods/334372/files/4938964/download
-
 proc addonFromUrl(url: string): Option[Addon] =
   var urlmatch: array[2, string]
   let pattern = re"^(?:https?://)?(?:www\.)?(.+)\.(?:com|org)/(.+[^/\n])"
   var found = find(cstring(url), pattern, urlmatch, 0, len(url))
-  if found == -1:
-    return none(Addon)
+  if found == -1 or urlmatch[1] == "":
+    echo &"Unable to determine addon from {url}."
   case urlmatch[0].toLower()
     of "curseforge":
       var m: array[1, string]
       let pattern = re"\/mods\/(\d+)\/"
       discard find(cstring(urlmatch[1]), pattern, m, 0, len(urlmatch[1]))
-      return some(newAddon(m[0], Curse))
+      if m[0] == "":
+        echo &"Unable to determine addon from {url}."
+      else:
+        return some(newAddon(m[0], Curse))
     of "github":
       let p = re"^(.+?/.+?)(?:/|$)(?:tree/)?(.+)?"
       var m: array[2, string]
@@ -93,7 +94,8 @@ proc addonFromUrl(url: string): Option[Addon] =
       discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
       return some(newAddon(m[0], Wowint))
     else:
-      return none(Addon)
+      discard
+  return none(Addon)
 
 proc addonFromId(id: int16): Option[Addon] =
   for a in configData.addons:

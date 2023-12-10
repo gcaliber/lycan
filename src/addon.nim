@@ -194,36 +194,6 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) {.gcsafe.} =
   of Wowint:
     addon.downloadUrl = json[0]["UIDownload"].getStr()
 
-
-proc getLatestUrl(addon: Addon): string {.gcsafe.} =
-  case addon.kind
-  of Curse:
-    return &"https://www.curseforge.com/api/v1/mods/{addon.project}/files"
-  of Github:
-    return &"https://api.github.com/repos/{addon.project}/releases/latest"
-  of Gitlab:
-    let urlEncodedProject = addon.project.replace("/", "%2F")
-    return &"https://gitlab.com/api/v4/projects/{urlEncodedProject}/releases"
-  of Tukui:
-    return "https://api.tukui.org/v1/addons/"
-  of Wowint:
-    return &"https://api.mmoui.com/v3/game/WOW/filedetails/{addon.project}.json"
-  of GithubRepo:
-    return &"https://api.github.com/repos/{addon.project}/commits/{addon.branch.get()}"
-
-
-proc getLatest(addon: Addon): Response {.gcsafe.} =
-  let url = addon.getLatestUrl()
-  var headers = newHttpHeaders()
-  case addon.kind
-  of Github, GithubRepo:
-    if addon.config.githubToken != "":
-      headers["Authorization"] = &"token {addon.config.githubToken}"
-  else:
-    discard
-  let client = newHttpClient(headers = headers)
-  return client.get(url)
-
 proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   if addon.state == Failed: return
   var headers = newHttpHeaders()
@@ -358,13 +328,49 @@ proc unzip(addon: Addon) {.gcsafe.} =
     addon.setAddonState(Failed, "Problem unzipping files.", &"{addon.name} unzip error", e)
     discard
 
+proc getLatestUrl(addon: Addon): string {.gcsafe.} =
+  case addon.kind
+  of Curse:
+    return &"https://www.curseforge.com/api/v1/mods/{addon.project}/files"
+  of Github:
+    return &"https://api.github.com/repos/{addon.project}/releases/latest"
+  of Gitlab:
+    let urlEncodedProject = addon.project.replace("/", "%2F")
+    return &"https://gitlab.com/api/v4/projects/{urlEncodedProject}/releases"
+  of Tukui:
+    return "https://api.tukui.org/v1/addons/"
+  of Wowint:
+    return &"https://api.mmoui.com/v3/game/WOW/filedetails/{addon.project}.json"
+  of GithubRepo:
+    return &"https://api.github.com/repos/{addon.project}/commits/{addon.branch.get}"
+
+proc getLatest(addon: Addon): Response {.gcsafe.} =
+  let url = addon.getLatestUrl()
+  var headers = newHttpHeaders()
+  case addon.kind
+  of Github, GithubRepo:
+    if addon.config.githubToken != "":
+      headers["Authorization"] = &"token {addon.config.githubToken}"
+  else:
+    discard
+  var retryCount: int
+  let client = newHttpClient(headers = headers)
+  var response: Response
+  while true:
+    response = client.get(url)
+    if response.status.contains("200"):
+      return response
+    else:
+      retryCount += 1
+    if retryCount > 4:
+      addon.setAddonState(Failed, &"Bad response retrieving latest addon info - {response.status}: {addon.getLatestUrl()}",
+      &"Get latest JSON bad response: {response.status}")
+      return
+    sleep(100)
+
 proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
   var json: JsonNode
   let response = addon.getLatest()
-  if not response.status.contains("200"):
-    addon.setAddonState(Failed, &"Bad response retrieving latest addon info - {response.status}: {addon.getLatestUrl()}",
-    &"Get latest JSON bad response: {response.status}")
-    return
   try:
     json = parseJson(response.body)
   except Exception as e:
