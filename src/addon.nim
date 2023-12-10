@@ -200,7 +200,7 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   case addon.kind
   of Github, GithubRepo:
     if addon.config.githubToken != "":
-      headers["Authorization"] = &"token {addon.config.githubToken}"
+      headers["Authorization"] = &"Bearer {addon.config.githubToken}"
   else:
     discard
   let client = newHttpClient(headers = headers)
@@ -350,7 +350,7 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
   case addon.kind
   of Github, GithubRepo:
     if addon.config.githubToken != "":
-      headers["Authorization"] = &"token {addon.config.githubToken}"
+      headers["Authorization"] = &"Bearer {addon.config.githubToken}"
   else:
     discard
   var retryCount = 0
