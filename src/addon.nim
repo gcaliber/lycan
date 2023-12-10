@@ -353,7 +353,7 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
       headers["Authorization"] = &"token {addon.config.githubToken}"
   else:
     discard
-  var retryCount: int
+  var retryCount = 0
   let client = newHttpClient(headers = headers)
   var response: Response
   while true:
@@ -371,6 +371,7 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
 proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
   var json: JsonNode
   let response = addon.getLatest()
+  if addon.state == Failed: return
   try:
     json = parseJson(response.body)
   except Exception as e:
