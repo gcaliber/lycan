@@ -100,20 +100,20 @@ proc stateMessage*(addon: Addon, nameSpace: int) =
     discard
   release(stdoutLock)
 
-proc setAddonState(addon: Addon, state: AddonState, loggedMsg: string, level: LogLevel = Info) =
+proc setAddonState(addon: Addon, state: AddonState, loggedMsg: string, level: LogLevel = Info) {.gcsafe.} =
   if addon.state != Failed:
     addon.state = state
   logChannel.send(LogMessage(level: level, msg: loggedMsg, e: nil))
   addonChannel.send(addon)
 
-proc setAddonState(addon: Addon, state: AddonState, errorMsg: string, loggedMsg: string, e: ref Exception = nil, level: LogLevel = Fatal) =
+proc setAddonState(addon: Addon, state: AddonState, errorMsg: string, loggedMsg: string, e: ref Exception = nil, level: LogLevel = Fatal) {.gcsafe.} =
   # if addon.state != Failed:
   addon.state = state
   addon.errorMsg = errorMsg
   logChannel.send(LogMessage(level: level, msg: loggedMsg, e: e))
   addonChannel.send(addon)
 
-proc setName(addon: Addon, json: JsonNode, name: string = "none") =
+proc setName(addon: Addon, json: JsonNode, name: string = "none") {.gcsafe.} =
   if addon.state == Failed: return
   case addon.kind
   of Curse:
@@ -131,7 +131,7 @@ proc setName(addon: Addon, json: JsonNode, name: string = "none") =
   if addon.name.len > 34:
     addon.name = addon.name[0 .. 33]
 
-proc setVersion(addon: Addon, json: JsonNode) =
+proc setVersion(addon: Addon, json: JsonNode) {.gcsafe.} =
   if addon.state == Failed: return
   addon.old_version = addon.version
   case addon.kind
@@ -154,7 +154,7 @@ proc setVersion(addon: Addon, json: JsonNode) =
   of Wowint:
     addon.version = json[0]["UIVersion"].getStr()
 
-proc getInvalidModeStrings(addon: Addon): seq[string] =
+proc getInvalidModeStrings(addon: Addon): seq[string] {.gcsafe.} =
   case addon.config.mode
   of Retail:
     result = @["bcc", "tbc", "wotlk", "wotlkc", "Classic", "classic"]
@@ -165,7 +165,7 @@ proc getInvalidModeStrings(addon: Addon): seq[string] =
   of None:
     discard
 
-proc setDownloadUrl(addon: Addon, json: JsonNode) =
+proc setDownloadUrl(addon: Addon, json: JsonNode) {.gcsafe.} =
   if addon.state == Failed: return
   case addon.kind
   of Curse:
@@ -196,7 +196,7 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) =
     addon.downloadUrl = json[0]["UIDownload"].getStr()
 
 
-proc getLatestUrl(addon: Addon): string =
+proc getLatestUrl(addon: Addon): string {.gcsafe.} =
   case addon.kind
   of Curse:
     return &"https://www.curseforge.com/api/v1/mods/{addon.project}/files"
@@ -213,7 +213,7 @@ proc getLatestUrl(addon: Addon): string =
     return &"https://api.github.com/repos/{addon.project}/commits/{addon.branch.get()}"
 
 
-proc getLatest(addon: Addon): Response =
+proc getLatest(addon: Addon): Response {.gcsafe.} =
   let url = addon.getLatestUrl()
   var headers = newHttpHeaders()
   case addon.kind
@@ -225,7 +225,7 @@ proc getLatest(addon: Addon): Response =
   let client = newHttpClient(headers = headers)
   return client.get(url)
 
-proc download(addon: Addon, json: JsonNode) =
+proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   if addon.state == Failed: return
   var headers = newHttpHeaders()
   case addon.kind
@@ -262,7 +262,7 @@ proc download(addon: Addon, json: JsonNode) =
     addon.setAddonState(Failed, &"Problem encountered while downloading.", &"download failed, error writing {addon.filename}", e)
   close(file)
 
-proc processTocs(path: string): bool =
+proc processTocs(path: string): bool {.gcsafe.} =
   for kind, file in walkDir(path):
     if kind == pcFile:
       var (dir, name, ext) = splitFile(file)
@@ -276,7 +276,7 @@ proc processTocs(path: string): bool =
         return true
   return false
 
-proc getAddonDirs(addon: Addon): seq[string] =
+proc getAddonDirs(addon: Addon): seq[string] {.gcsafe.} =
   var current = addon.extractDir
   var firstPass = true
   while true:
@@ -290,7 +290,7 @@ proc getAddonDirs(addon: Addon): seq[string] =
       else: return collect(for kind, dir in walkDir(parentDir(current)): (if kind == pcDir: dir))
     firstPass = false
 
-proc getBackupFiles(addon: Addon): seq[string] = 
+proc getBackupFiles(addon: Addon): seq[string] {.gcsafe.} = 
   var name = $addon.kind & addon.project
   for c in invalidFilenameChars:
     name = name.replace(c, '-')
@@ -303,7 +303,7 @@ proc getBackupFiles(addon: Addon): seq[string] =
   backups.sort((a, b) => int(getCreationTime(a).toUnix() - getCreationTime(b).toUnix()))
   return backups
 
-proc removeAddonFiles(addon: Addon, removeAllBackups: bool) =
+proc removeAddonFiles(addon: Addon, removeAllBackups: bool) {.gcsafe.} =
   for dir in addon.dirs:
     removeDir(addon.config.installDir / dir)
   var backups = getBackupFiles(addon)
@@ -311,14 +311,14 @@ proc removeAddonFiles(addon: Addon, removeAllBackups: bool) =
     for file in backups:
       removeFile(file)
 
-proc setIdAndCleanup(addon: Addon) =
+proc setIdAndCleanup(addon: Addon) {.gcsafe.} =
   for a in addon.config.addons:
     if a == addon:
       addon.id = a.id
       a.removeAddonFiles(removeAllBackups = false)
       break
 
-proc moveDirs(addon: Addon) =
+proc moveDirs(addon: Addon) {.gcsafe.} =
   if addon.state == Failed: return
   var source = addon.getAddonDirs()
   source.sort()
@@ -333,7 +333,7 @@ proc moveDirs(addon: Addon) =
     except Exception as e:
       addon.setAddonState(Failed, "Problem moving Addon directories.", &"{addon.name} move directories error", e)
 
-proc createBackup(addon: Addon) =
+proc createBackup(addon: Addon) {.gcsafe.} =
   if addon.state == Failed: return
   let backups = getBackupFiles(addon)
   var name = $addon.kind & addon.project & "&V=" & addon.version & ".zip"
@@ -348,7 +348,7 @@ proc createBackup(addon: Addon) =
     addon.setAddonState(Failed, "Problem creating backup files.", &"{addon.name} create backup error", e)
     discard
 
-proc unzip(addon: Addon) =
+proc unzip(addon: Addon) {.gcsafe.} =
   if addon.state == Failed: return
   let (_, name, _) = splitFile(addon.filename)
   addon.extractDir = addon.config.tempDir / name
@@ -359,7 +359,7 @@ proc unzip(addon: Addon) =
     addon.setAddonState(Failed, "Problem unzipping files.", &"{addon.name} unzip error", e)
     discard
 
-proc getLatestJson(addon: Addon): JsonNode =
+proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
   var json: JsonNode
   let response = addon.getLatest()
   if not response.status.contains("200"):
@@ -395,7 +395,7 @@ proc getLatestJson(addon: Addon): JsonNode =
     discard
   return json
 
-proc install*(addon: Addon) =
+proc install*(addon: Addon) {.gcsafe.} =
   addon.setAddonState(Checking, &"Checking: {addon.getName()} getting latest version information")
   let json = addon.getLatestJson()
   addon.setAddonState(Parsing, &"Parsing: {addon.getName()} JSON for latest version")
