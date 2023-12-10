@@ -146,9 +146,8 @@ proc processMessages(): seq[Addon] =
 proc processLog() =
   while true:
     let (ok, logMessage) = logChannel.tryRecv()
-    if ok:
-      if logMessage.level <= configData.logLevel:
-        log(logMessage)
+    if ok and logMessage.level <= configData.logLevel:
+      log(logMessage)
     else:
       break
 
