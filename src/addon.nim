@@ -181,7 +181,7 @@ proc setNameFromToc(addon: Addon) =
     of None: "none"
     var found = false
     for file in tocs:
-      if file.endsWith(suffix):
+      if file.toLower().contains(suffix):
         tocFilename = file
         found = true
         break
@@ -191,7 +191,6 @@ proc setNameFromToc(addon: Addon) =
     if line.startsWith("## Title"):
       let value = line.split(':', 1)[1].strip()
       addon.name = value.unescape()
-      log(&"Changed name to {tocFilename.lastPathPart()} Title: {addon.name}")
       break
 
 proc setNameInitial(addon: Addon, json: JsonNode, name: string = "none") {.gcsafe.} =
