@@ -334,11 +334,12 @@ proc tocDir(path: string): bool {.gcsafe.} =
       var (dir, name, ext) = splitFile(file)
       if ext == ".toc":
         if name != lastPathPart(dir):
-          let p = re("(.+?)(?:$|[-_](?i:mainline|tbc|bcc|vanilla|classic|wrath))", flags = {reIgnoreCase})
+          let p = re("(.+?)(?:$|[-_](?i:mainline|classic|wrath|tbc|bcc))", flags = {reIgnoreCase})
           var m: array[2, string]
           discard find(cstring(name), p, m, 0, len(name))
           name = m[0]
-          moveDir(dir, parentDir(dir) / name)
+          log(&"{addon.name}: Renamed {dir} to to {dir.parentDir() / name}")
+          moveDir(dir, dir.parentDir() / name)
         return true
   return false
 
@@ -347,6 +348,7 @@ proc getAddonDirs(addon: Addon): seq[string] {.gcsafe.} =
   var firstPass = true
   while true:
     if not tocDir(current):
+      log(&"{addon.name}: extractDir contains no toc files, collecting subdirectories")
       let subdirs = collect(for kind, dir in walkDir(current): (if kind == pcDir: dir))
       assert len(subdirs) != 0 
       current = subdirs[0]
@@ -368,15 +370,8 @@ proc getBackupFiles(addon: Addon): seq[string] {.gcsafe.} =
   backups.sort((a, b) => int(getCreationTime(a).toUnix() - getCreationTime(b).toUnix()))
   return backups
 
-# Reinstall should not fail
-# Traceback (most recent call last)
-# /home/mike/projects/lycan/src/addon.nim(541) workQueue
-# /home/mike/projects/lycan/src/addon.nim(465) install
-# /home/mike/projects/lycan/src/addon.nim(343) moveDirs
-# /home/mike/projects/lycan/src/addon.nim(336) setIdAndCleanup
-# /home/mike/projects/lycan/src/addon.nim(325) removeAddonFiles
-# SIGSEGV: Illegal storage access. (Attempt to read from nil?)
-# Segmentation fault (core dumped)
+# on linux the addon.dirs do not match the actual directories for some reason
+# this causes a segfault here when and install is done for an already installed addon
 
 proc removeAddonFiles(addon: Addon, removeAllBackups: bool) {.gcsafe.} =
   for dir in addon.dirs:
