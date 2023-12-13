@@ -144,7 +144,7 @@ proc setAddonState(addon: Addon, state: AddonState, errorMsg: string, loggedMsg:
   logChannel.send(LogMessage(level: level, msg: loggedMsg, e: e))
   addonChannel.send(addon.deepCopy())
 
-proc setName(addon: Addon, json: JsonNode, name: string = "none") {.gcsafe.} =
+proc setNameInitial(addon: Addon, json: JsonNode, name: string = "none") {.gcsafe.} =
   if addon.state == Failed: return
   case addon.kind
   of Curse:
@@ -284,8 +284,9 @@ proc processTocs(path: string): bool {.gcsafe.} =
     if kind == pcFile:
       var (dir, name, ext) = splitFile(file)
       if ext == ".toc":
+        # we could rename from here, but would need to process a matching toc file
         if name != lastPathPart(dir):
-          let p = re("(.+?)(?:$|[-_](?i:mainline|Classic|tbc|vanilla|wotlkc?|bcc|classic))", flags = {reIgnoreCase})
+          let p = re("(.+?)(?:$|[-_](?i:mainline|tbc|vanilla|wotlkc?|bcc|classic))", flags = {reIgnoreCase})
           var m: array[2, string]
           discard find(cstring(name), p, m, 0, len(name))
           name = m[0]
@@ -319,6 +320,16 @@ proc getBackupFiles(addon: Addon): seq[string] {.gcsafe.} =
   # oldest to newest
   backups.sort((a, b) => int(getCreationTime(a).toUnix() - getCreationTime(b).toUnix()))
   return backups
+
+# Reinstall should not fail
+# Traceback (most recent call last)
+# /home/mike/projects/lycan/src/addon.nim(541) workQueue
+# /home/mike/projects/lycan/src/addon.nim(465) install
+# /home/mike/projects/lycan/src/addon.nim(343) moveDirs
+# /home/mike/projects/lycan/src/addon.nim(336) setIdAndCleanup
+# /home/mike/projects/lycan/src/addon.nim(325) removeAddonFiles
+# SIGSEGV: Illegal storage access. (Attempt to read from nil?)
+# Segmentation fault (core dumped)
 
 proc removeAddonFiles(addon: Addon, removeAllBackups: bool) {.gcsafe.} =
   for dir in addon.dirs:
@@ -402,7 +413,7 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
       if addon.kind == Github and response.status.contains("404"):
         # https://api.github.com/repos/Boboseb/FloTotemBar/branches
         # We could get this json instead and choose master or main if it exists, otherwise just fail and give a proper error
-        log(&"Got {response.status}: {addon.getLatestUrl()} - This usually means no releases are available so switching to trying master branch.", Warning)
+        log(&"Got {response.status}: {addon.getLatestUrl()} - This usually means no releases are available so switching to trying master branch", Warning)
         addon.kind = GithubRepo
         addon.branch = some("master")
         return addon.getLatest()
@@ -455,7 +466,7 @@ proc install*(addon: Addon) {.gcsafe.} =
   if addon.version != addon.oldVersion:
     addon.time = now()
     addon.setDownloadUrl(json)
-    addon.setName(json)
+    addon.setNameInitial(json)
     addon.setAddonState(Downloading, &"Downloading: {addon.getName()}")
     addon.download(json)
     addon.setAddonState(Installing, &"Installing: {addon.getName()}")
