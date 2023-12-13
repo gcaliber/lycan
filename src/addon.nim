@@ -449,7 +449,7 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
       retryCount += 1
     if retryCount > 4:
       if addon.kind == Github and response.status.contains("404"):
-        log(&"Got {response.status}: {addon.getLatestUrl()} - This usually means no releases are available so switching to trying main/master branch", Warning)
+        log(&"{addon.name}: Got {response.status}: {addon.getLatestUrl()} - This usually means no releases are available so switching to trying main/master branch", Warning)
         let resp = client.get(&"https://api.github.com/repos/{addon.project}/branches")
         let branches = parseJson(resp.body)
         let names = collect(for item in branches: item["name"].getStr())
@@ -458,6 +458,7 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
         elif names.contains("main"):
           addon.branch = some("main")
         else:
+          log(&"{addon.name}: No branch named master or main avaialable", Warning)
           addon.setAddonState(Failed, &"Bad response retrieving latest addon info - {response.status}: {addon.getLatestUrl()}",
           &"Get latest JSON bad response: {response.status}")
         addon.kind = GithubRepo
