@@ -102,8 +102,8 @@ proc processMessages(): seq[Addon] =
         addons = addons.filter(a => a != addon)
         addons.add(addon)
         maxName = addons[addons.map(a => a.name.len).maxIndex()].name.len + 2
-        # for addon in addons:
-        #   addon.stateMessage(maxName)
+        for addon in addons:
+          addon.stateMessage(maxName)
     else:
       break
 

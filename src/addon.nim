@@ -144,6 +144,56 @@ proc setAddonState(addon: Addon, state: AddonState, errorMsg: string, loggedMsg:
   logChannel.send(LogMessage(level: level, msg: loggedMsg, e: e))
   addonChannel.send(addon.deepCopy())
 
+proc unescape(str: string): string =
+  var i = 0
+  while i <= str.high:
+    if str[i] == '|':
+      if i > 0 and str[i - 1] == '\\':
+        discard
+      if str[i + 1] == 'r':
+        i += 2
+      elif str[i + 1] == 'c' and str[i + 2] == 'n':
+        while str[i] != ':': i += 1
+        i += 1
+      else:
+        i += 10
+    if i <= str.high:
+      result.add(str[i])
+    i += 1
+
+proc setNameFromToc(addon: Addon) =
+  var tocs: seq[string]
+  var tocFilename: string
+  for kind, file in walkDir(addon.config.installDir / addon.dirs[0]): # this could be wrong, could do a better search based on the current name
+    if kind == pcFile:
+      let (_, _, ext) = splitFile(file)
+      if ext == ".toc":
+        tocs.add(file)
+  if tocs.len == 0:
+    return
+  elif tocs.len == 1:
+    tocFilename = tocs[0]
+  else:
+    let suffix = case addon.config.mode
+    of Retail: "mainline"
+    of Vanilla: "classic"
+    of Classic: "wrath"
+    of None: "none"
+    var found = false
+    for file in tocs:
+      if file.endsWith(suffix):
+        tocFilename = file
+        found = true
+        break
+    if not found:
+      return
+  for line in tocFilename.lines():
+    if line.startsWith("## Title"):
+      let value = line.split(':', 1)[1].strip()
+      addon.name = value.unescape()
+      log(&"Changed name to {tocFilename.lastPathPart()} Title: {addon.name}")
+      break
+
 proc setNameInitial(addon: Addon, json: JsonNode, name: string = "none") {.gcsafe.} =
   if addon.state == Failed: return
   case addon.kind
@@ -279,15 +329,13 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
     addon.setAddonState(Failed, &"Problem encountered while downloading.", &"download failed, error writing {addon.filename}", e)
   close(file)
 
-proc processTocs(path: string): bool {.gcsafe.} =
+proc tocDir(path: string): bool {.gcsafe.} =
   for kind, file in walkDir(path):
     if kind == pcFile:
       var (dir, name, ext) = splitFile(file)
       if ext == ".toc":
-        # we could rename from here, but would need to process a matching toc file
-        # this also doesn't quite do the correct thing, we should probably read the toc file to name the directory correctly
         if name != lastPathPart(dir):
-          let p = re("(.+?)(?:$|[-_](?i:mainline|tbc|vanilla|wotlkc?|bcc|classic))", flags = {reIgnoreCase})
+          let p = re("(.+?)(?:$|[-_](?i:mainline|tbc|bcc|vanilla|classic|wrath))", flags = {reIgnoreCase})
           var m: array[2, string]
           discard find(cstring(name), p, m, 0, len(name))
           name = m[0]
@@ -299,8 +347,7 @@ proc getAddonDirs(addon: Addon): seq[string] {.gcsafe.} =
   var current = addon.extractDir
   var firstPass = true
   while true:
-    let toc = processTocs(current)
-    if not toc:
+    if not tocDir(current):
       let subdirs = collect(for kind, dir in walkDir(current): (if kind == pcDir: dir))
       assert len(subdirs) != 0 
       current = subdirs[0]
@@ -335,7 +382,7 @@ proc getBackupFiles(addon: Addon): seq[string] {.gcsafe.} =
 proc removeAddonFiles(addon: Addon, removeAllBackups: bool) {.gcsafe.} =
   for dir in addon.dirs:
     removeDir(addon.config.installDir / dir)
-  var backups = getBackupFiles(addon)
+  var backups = addon.getBackupFiles()
   if removeAllBackups:
     for file in backups:
       removeFile(file)
@@ -474,6 +521,7 @@ proc install*(addon: Addon) {.gcsafe.} =
     addon.unzip()
     addon.createBackup()
     addon.moveDirs()
+    addon.setNameFromToc()
     if addon.oldVersion.isEmptyOrWhitespace:
       addon.setAddonState(FinishedInstalled, &"Installed: {addon.getName()} installed at version {addon.version}")
     else:
