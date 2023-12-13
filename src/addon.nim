@@ -147,7 +147,7 @@ proc setAddonState(addon: Addon, state: AddonState, errorMsg: string, loggedMsg:
 proc unescape(str: string): string =
   var i = 0
   while i <= str.high:
-    if str[i] == '|':
+    while i <= str.high and str[i] == '|':
       if i > 0 and str[i - 1] == '\\':
         discard
       if str[i + 1] == 'r':
@@ -329,6 +329,7 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   close(file)
 
 proc tocDir(path: string): bool {.gcsafe.} =
+  log(&"Searching for toc in {path}")
   for kind, file in walkDir(path):
     if kind == pcFile:
       var (dir, name, ext) = splitFile(file)
@@ -338,9 +339,10 @@ proc tocDir(path: string): bool {.gcsafe.} =
           var m: array[2, string]
           discard find(cstring(name), p, m, 0, len(name))
           name = m[0]
-          log(&"{addon.name}: Renamed {dir} to to {dir.parentDir() / name}")
           moveDir(dir, dir.parentDir() / name)
+        log(&"Found toc in {path}")
         return true
+  log(&"No toc in {path}")
   return false
 
 proc getAddonDirs(addon: Addon): seq[string] {.gcsafe.} =

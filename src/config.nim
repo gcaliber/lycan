@@ -96,11 +96,13 @@ proc writeConfig*(config: Config) =
   json["githubToken"] = %config.githubToken
   json["logLevel"] = %config.logLevel
   let path = if fileExists(localPath): localPath else: configPath
-  let file = readFile(path)
+  if not dirExists(path.parentDir()):
+    createDir(path.parentDir())
   var existingConfig: JsonNode
   try:
-    existingConfig = parseJson(file)
-  except JsonParsingError:
+      let file = readFile(path)
+      existingConfig = parseJson(file)
+  except:
     existingConfig = newJObject()
   for mode in [Retail, Vanilla, Classic]:
     if mode == config.mode:
@@ -126,8 +128,6 @@ proc writeConfig*(config: Config) =
           json[$mode]["addonJsonFile"] = %""
           json[$mode]["installDir"] = %""
           json[$mode]["backupDir"] = %""
-  if not dirExists(path.parentDir()):
-    createDir(path.parentDir())
   try:
     writeFile(path, pretty(json))
     log(&"Configuration file saved: {path}", Info)
@@ -198,8 +198,8 @@ proc loadConfig*(newMode: Mode = None, newPath: string = "", basic = false): Con
     result.backupDir = settings["backupDir"].getStr()
   else:
     result.backupEnabled = true
-    if newMode != None:
-      return
+    # if newMode != None:
+    #   return
     var wowPath: string
     if newPath != "": 
       wowPath = newPath
@@ -219,6 +219,7 @@ proc loadConfig*(newMode: Mode = None, newPath: string = "", basic = false): Con
     if not dirExists(addonsPath):
       echo &"Found a WoW directory: {wowPath}\nNo AddOns directory was found. Make sure you have started WoW at least once."
     if wowPath != "":
+      echo &"Found a WoW directory: {wowPath}"
       addonJsonFile = joinPath(wowPath, dir, "WTF", "lycan_addons.json")
       result.installDir = addonsPath
       result.addonJsonFile = addonJsonFile
