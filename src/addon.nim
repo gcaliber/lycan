@@ -285,6 +285,7 @@ proc processTocs(path: string): bool {.gcsafe.} =
       var (dir, name, ext) = splitFile(file)
       if ext == ".toc":
         # we could rename from here, but would need to process a matching toc file
+        # this also doesn't quite do the correct thing, we should probably read the toc file to name the directory correctly
         if name != lastPathPart(dir):
           let p = re("(.+?)(?:$|[-_](?i:mainline|tbc|vanilla|wotlkc?|bcc|classic))", flags = {reIgnoreCase})
           var m: array[2, string]
