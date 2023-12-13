@@ -7,6 +7,8 @@
 
 # https://github.com/Tercioo/Plater-Nameplates/tree/master https://www.tukui.org/elvui https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html https://gitlab.com/woblight/actionmirroringframe
 
+# https://www.wowinterface.com/downloads/info22095.html
+
 import std/enumerate
 import std/options
 import std/[os, parseopt]
@@ -53,7 +55,7 @@ proc addonFromUrl(url: string): Option[Addon] =
     of "tukui":
       return some(newAddon(urlmatch[1], Tukui))
     of "wowinterface":
-      let p = re"^downloads\/info(\d+)-"
+      let p = re"^downloads\/info(\d+)-?"
       var m: array[1, string]
       discard find(cstring(urlmatch[1]), p, m, 0, len(urlmatch[1]))
       return some(newAddon(m[0], Wowint))
