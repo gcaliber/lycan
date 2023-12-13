@@ -184,8 +184,6 @@ proc loadConfig*(newMode: Mode = None, newLogLevel: LogLevel = None, newPath: st
     mode = if newMode == None: Retail else: newMode
     modeExists = false
 
-
-
   result.mode = mode
   result.tempDir = getTempDir()
   result.term = termInit()
