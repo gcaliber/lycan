@@ -31,7 +31,7 @@ proc log*(msg: string, level: LogLevel = Debug) =
     case logLevel:
     of Debug, Fatal, Warning, Info:
       loggedMessage = &"[{time()}]:[{$level}] {msg}\n"
-    of Off: discard
+    of Off, None: discard
     writeLog(loggedMessage)
 
 proc log*(msg: string, level: LogLevel, e: ref Exception) =
@@ -41,7 +41,7 @@ proc log*(msg: string, level: LogLevel, e: ref Exception) =
       loggedMessage = &"[{time()}]:[{$level}]\n{e.name}: {e.msg}\n{e.getStackTrace()}\n"
     of Fatal, Warning, Info:
       loggedMessage = &"[{time()}]:[{$level}] {e.name}: {e.msg}\n"
-    of Off: discard
+    of Off, None: discard
     writeLog(loggedMessage)
 
 proc log*(logMessage: LogMessage) =

@@ -134,7 +134,7 @@ proc writeConfig*(config: Config) =
   except Exception as e:
     log(&"Fatal error writing: {path}", Fatal, e)
 
-proc loadConfig*(newMode: Mode = None, newPath: string = "", basic = false): Config =
+proc loadConfig*(newMode: Mode = None, newLogLevel: LogLevel = None, newPath: string = "", basic = false): Config =
   var 
     configJson: JsonNode
     local = false
@@ -165,7 +165,6 @@ proc loadConfig*(newMode: Mode = None, newPath: string = "", basic = false): Con
   result = Config()
 
   if not configJson.isNil:
-    result.logLevel.fromJson(configJson["logLevel"])
     try:
       if newMode == None:
         mode.fromJson(configJson["mode"])
@@ -176,10 +175,16 @@ proc loadConfig*(newMode: Mode = None, newPath: string = "", basic = false): Con
         modeExists = false
     except KeyError:
       modeExists = false
+    if newLogLevel == None:
+      result.logLevel.fromJson(configJson["logLevel"])
+    else:
+      result.logLevel = newLogLevel
   else:
     result.logLevel = if defined(release): Fatal else: Debug
     mode = if newMode == None: Retail else: newMode
     modeExists = false
+
+
 
   result.mode = mode
   result.tempDir = getTempDir()
@@ -299,8 +304,23 @@ proc showConfig*() =
     of Vanilla: "Vanilla"
     of None: "Error: No mode set"
   echo &"Configuration for current mode: {mode}"
+  echo &"Logging level: "
   echo &"  Addons directory: {configData.installDir}"
   echo &"  Backups enabled: {configData.backupEnabled}"
   if configData.backupEnabled:
     echo &"  Backups directory: {configData.backupDir}"
   quit()
+
+proc setLogLevel*(arg: string) =
+  let level = arg.toLower()
+  var newLevel: LogLevel
+  case level
+  of "off": newLevel = Off
+  of "debug": newLevel = Debug
+  of "warn", "warning": newLevel = Warning
+  of "info": newLevel = Info
+  of "fatal": newLevel = Fatal
+  else: 
+    echo "Valid logging levels are off, info, debug, warn, and fatal"
+    quit()
+  configData = loadConfig(newLogLevel = newLevel)

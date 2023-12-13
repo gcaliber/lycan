@@ -181,7 +181,7 @@ proc setNameFromToc(addon: Addon) =
     of None: "none"
     var found = false
     for file in tocs:
-      if file.toLower().contains(suffix):
+      if file.toLower().endsWith(suffix & ".toc"):
         tocFilename = file
         found = true
         break
@@ -513,7 +513,8 @@ proc install*(addon: Addon) {.gcsafe.} =
     addon.moveDirs()
     if addon.kind == Curse:
       addon.setNameFromToc()
-      # curseforge JSON doesn't include any name. Initially we try and get a name from the zip file, but some authors use terrible file names so this is usually better
+      # curseforge URL and JSON don't include any name
+      # Initially we try and get a name from the zip file, but some authors use terrible file names so this is usually better
     if addon.oldVersion.isEmptyOrWhitespace:
       addon.setAddonState(FinishedInstalled, &"Installed: {addon.getName()} installed at version {addon.version}")
     else:

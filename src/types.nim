@@ -11,6 +11,7 @@ type
     Warning = "WARN"
     Info = "INFO"
     Debug = "DEBUG"
+    None = "None"
 
   Mode* = enum
     Retail = "Retail",
