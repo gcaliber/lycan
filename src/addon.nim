@@ -329,7 +329,6 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   close(file)
 
 proc tocDir(path: string): bool {.gcsafe.} =
-  log(&"Searching for toc in {path}")
   for kind, file in walkDir(path):
     if kind == pcFile:
       var (dir, name, ext) = splitFile(file)
@@ -340,9 +339,7 @@ proc tocDir(path: string): bool {.gcsafe.} =
           discard find(cstring(name), p, m, 0, len(name))
           name = m[0]
           moveDir(dir, dir.parentDir() / name)
-        log(&"Found toc in {path}")
         return true
-  log(&"No toc in {path}")
   return false
 
 proc getAddonDirs(addon: Addon): seq[string] {.gcsafe.} =
@@ -371,9 +368,6 @@ proc getBackupFiles(addon: Addon): seq[string] {.gcsafe.} =
   # oldest to newest
   backups.sort((a, b) => int(getCreationTime(a).toUnix() - getCreationTime(b).toUnix()))
   return backups
-
-# on linux the addon.dirs do not match the actual directories for some reason
-# this causes a segfault here when and install is done for an already installed addon
 
 proc removeAddonFiles(addon: Addon, removeAllBackups: bool) {.gcsafe.} =
   for dir in addon.dirs:
@@ -517,8 +511,8 @@ proc install*(addon: Addon) {.gcsafe.} =
     addon.unzip()
     addon.createBackup()
     addon.moveDirs()
-    # if addon.kind == Curse:
-    addon.setNameFromToc()
+    if addon.kind == Curse:
+      addon.setNameFromToc()
       # curseforge JSON doesn't include any name. Initially we try and get a name from the zip file, but some authors use terrible file names so this is usually better
     if addon.oldVersion.isEmptyOrWhitespace:
       addon.setAddonState(FinishedInstalled, &"Installed: {addon.getName()} installed at version {addon.version}")
