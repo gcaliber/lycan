@@ -149,7 +149,7 @@ proc unescape(str: string): string =
   while i <= str.high:
     while i <= str.high and str[i] == '|':
       if i > 0 and str[i - 1] == '\\':
-        discard
+        break
       if str[i + 1] == 'r':
         i += 2
       elif str[i + 1] == 'c' and str[i + 2] == 'n':
@@ -193,7 +193,7 @@ proc setNameFromToc(addon: Addon) =
       addon.name = value.unescape()
       break
 
-proc setNameInitial(addon: Addon, json: JsonNode, name: string = "none") {.gcsafe.} =
+proc setName(addon: Addon, json: JsonNode, name: string = "none") {.gcsafe.} =
   if addon.state == Failed: return
   case addon.kind
   of Curse:
@@ -510,14 +510,16 @@ proc install*(addon: Addon) {.gcsafe.} =
   if addon.version != addon.oldVersion:
     addon.time = now()
     addon.setDownloadUrl(json)
-    addon.setNameInitial(json)
+    addon.setName(json)
     addon.setAddonState(Downloading, &"Downloading: {addon.getName()}")
     addon.download(json)
     addon.setAddonState(Installing, &"Installing: {addon.getName()}")
     addon.unzip()
     addon.createBackup()
     addon.moveDirs()
+    # if addon.kind == Curse:
     addon.setNameFromToc()
+      # curseforge JSON doesn't include any name. Initially we try and get a name from the zip file, but some authors use terrible file names so this is usually better
     if addon.oldVersion.isEmptyOrWhitespace:
       addon.setAddonState(FinishedInstalled, &"Installed: {addon.getName()} installed at version {addon.version}")
     else:
