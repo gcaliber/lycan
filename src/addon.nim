@@ -449,11 +449,18 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
       retryCount += 1
     if retryCount > 4:
       if addon.kind == Github and response.status.contains("404"):
-        # https://api.github.com/repos/Boboseb/FloTotemBar/branches
-        # We could get this json instead and choose master or main if it exists, otherwise just fail and give a proper error
-        log(&"Got {response.status}: {addon.getLatestUrl()} - This usually means no releases are available so switching to trying master branch", Warning)
+        log(&"Got {response.status}: {addon.getLatestUrl()} - This usually means no releases are available so switching to trying main/master branch", Warning)
+        let resp = client.get(&"https://api.github.com/repos/{addon.project}/branches")
+        let branches = parseJson(resp.body)
+        let names = collect(for item in branches: item["name"].getStr())
+        if names.contains("master"):
+          addon.branch = some("master")
+        elif names.contains("main"):
+          addon.branch = some("main")
+        else:
+          addon.setAddonState(Failed, &"Bad response retrieving latest addon info - {response.status}: {addon.getLatestUrl()}",
+          &"Get latest JSON bad response: {response.status}")
         addon.kind = GithubRepo
-        addon.branch = some("master")
         return addon.getLatest()
       else:
         addon.setAddonState(Failed, &"Bad response retrieving latest addon info - {response.status}: {addon.getLatestUrl()}",
