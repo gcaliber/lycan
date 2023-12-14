@@ -3,7 +3,7 @@ import std/times
 
 type
   Action* = enum
-    Install, Update, Remove, List, Pin, Unpin, Restore, Setup, Empty, Help
+    Install, Update, Remove, List, Pin, Unpin, Restore, Setup, Empty, Help, Name
 
   LogLevel* = enum
     Off = "OFF",
@@ -27,7 +27,7 @@ type
     FinishedInstalled = "Installed",
     FinishedUpdated = "Updated",
     FinishedPinned = "Pinned",
-    FinishedAlreadyCurrent = "Finished",
+    FinishedAlreadyCurrent = "Up-to-Date",
     Failed = "Failed",
     Restoring = "Restoring",
     Restored = "Restored",
@@ -37,6 +37,7 @@ type
     NoBackup = "Not Found"
     Done = "Done"
     DoneFailed = "Failed"
+    Renamed = "Renamed"
   
   AddonKind* = enum
     Github, GithubRepo, Gitlab, Tukui, Wowint, Curse
@@ -65,6 +66,7 @@ type
     project*: string
     branch*: Option[string]
     name*: string
+    overrideName*: Option[string]
     kind*: AddonKind
     version*: string
     oldVersion*: string

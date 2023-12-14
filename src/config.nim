@@ -13,13 +13,17 @@ var addonChannel*: Channel[Addon]
 
 proc fromJsonHook(a: var Addon, j: JsonNode) =
   var
-    b: Option[string]
+    b, n: Option[string]
     d: seq[string]
     k: AddonKind
   try:
     b = some(j["branch"].getStr())
   except KeyError:
     b = none(string)
+  try:
+    n = some(j["overrideName"].getStr())
+  except KeyError:
+    n = none(string)
 
   d.fromJson(j["dirs"])
   k.fromJson(j["kind"])
@@ -30,6 +34,7 @@ proc fromJsonHook(a: var Addon, j: JsonNode) =
   a.branch = b
   a.version = j["version"].getStr()
   a.name = j["name"].getStr()
+  a.overrideName = n
   a.dirs = d
   a.id = int16(j["id"].getInt())
   a.pinned = j["pinned"].getBool()

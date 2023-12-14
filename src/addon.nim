@@ -42,8 +42,9 @@ proc assignIds*(addons: seq[Addon]) =
 proc toJsonHook*(a: Addon): JsonNode =
   result = newJObject()
   result["project"] = %a.project
-  if a.branch.isSome(): result["branch"] = %a.branch.get()
+  if a.branch.isSome: result["branch"] = %a.branch.get
   result["name"] = %a.name
+  if a.overrideName.isSome: result["overrideName"] = %a.overrideName.get
   result["kind"] = %a.kind
   result["version"] = %a.version
   result["id"] = %a.id
@@ -77,6 +78,7 @@ const DARK_GREY: Color = Color(0x20_20_20)
 const LIGHT_GREY: Color = Color(0x34_34_34)
 
 proc getName*(addon: Addon): string =
+  if addon.overrideName.isSome: return addon.overrideName.get
   result = if not addon.name.isEmptyOrWhitespace: addon.name 
   else: $addon.kind & ':' & addon.project
 
@@ -116,7 +118,7 @@ proc stateMessage*(addon: Addon, nameSpace: int) =
     t.write(indent, addon.line, true, colors, style,
       fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
-  of Unpinned:
+  of Unpinned, Renamed:
     t.write(indent, addon.line, true, colors, style,
       fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
@@ -144,57 +146,9 @@ proc setAddonState(addon: Addon, state: AddonState, errorMsg: string, loggedMsg:
   logChannel.send(LogMessage(level: level, msg: loggedMsg, e: e))
   addonChannel.send(addon.deepCopy())
 
-proc unescape(str: string): string =
-  var i = 0
-  while i <= str.high:
-    while i <= str.high and str[i] == '|':
-      if i > 0 and str[i - 1] == '\\':
-        break
-      if str[i + 1] == 'r':
-        i += 2
-      elif str[i + 1] == 'c' and str[i + 2] == 'n':
-        while str[i] != ':': i += 1
-        i += 1
-      else:
-        i += 10
-    if i <= str.high:
-      result.add(str[i])
-    i += 1
-
-proc setNameFromToc(addon: Addon) =
-  var tocs: seq[string]
-  var tocFilename: string
-  for kind, file in walkDir(addon.config.installDir / addon.dirs[0]): # this could be wrong, could do a better search based on the current name
-    if kind == pcFile:
-      let (_, _, ext) = splitFile(file)
-      if ext == ".toc":
-        tocs.add(file)
-  if tocs.len == 0:
-    return
-  elif tocs.len == 1:
-    tocFilename = tocs[0]
-  else:
-    let suffix = case addon.config.mode
-    of Retail: "mainline"
-    of Vanilla: "classic"
-    of Classic: "wrath"
-    of None: "none"
-    var found = false
-    for file in tocs:
-      if file.toLower().endsWith(suffix & ".toc"):
-        tocFilename = file
-        found = true
-        break
-    if not found:
-      return
-  for line in tocFilename.lines():
-    if line.startsWith("## Title"):
-      let value = line.split(':', 1)[1].strip()
-      addon.name = value.unescape()
-      break
-
 proc setName(addon: Addon, json: JsonNode, name: string = "none") {.gcsafe.} =
   if addon.state == Failed: return
+  if addon.overrideName.isSome: addon.name = addon.overrideName.get
   case addon.kind
   of Curse:
     addon.name = json["fileName"].getStr().split('-')[0]
@@ -369,11 +323,11 @@ proc getBackupFiles(addon: Addon): seq[string] {.gcsafe.} =
   backups.sort((a, b) => int(getCreationTime(a).toUnix() - getCreationTime(b).toUnix()))
   return backups
 
-proc removeAddonFiles(addon: Addon, removeAllBackups: bool) {.gcsafe.} =
+proc removeAddonFiles(addon: Addon, installDir: string, removeAllBackups: bool) {.gcsafe.} =
   for dir in addon.dirs:
-    removeDir(addon.config.installDir / dir)
-  var backups = addon.getBackupFiles()
+    removeDir(installDir / dir)
   if removeAllBackups:
+    var backups = addon.getBackupFiles()
     for file in backups:
       removeFile(file)
 
@@ -381,7 +335,7 @@ proc setIdAndCleanup(addon: Addon) {.gcsafe.} =
   for a in addon.config.addons:
     if a == addon:
       addon.id = a.id
-      a.removeAddonFiles(removeAllBackups = false)
+      a.removeAddonFiles(addon.config.installDir, removeAllBackups = false)
       break
 
 proc moveDirs(addon: Addon) {.gcsafe.} =
@@ -519,10 +473,6 @@ proc install*(addon: Addon) {.gcsafe.} =
     addon.unzip()
     addon.createBackup()
     addon.moveDirs()
-    if addon.kind == Curse:
-      addon.setNameFromToc()
-      # curseforge URL and JSON don't include any name
-      # Initially we try and get a name from the zip file, but some authors use terrible file names so this is usually better
     if addon.oldVersion.isEmptyOrWhitespace:
       addon.setAddonState(FinishedInstalled, &"Installed: {addon.getName()} installed at version {addon.version}")
     else:
@@ -531,7 +481,7 @@ proc install*(addon: Addon) {.gcsafe.} =
     addon.setAddonState(FinishedAlreadyCurrent, &"Finished: {addon.getName()} already up to date.")
 
 proc uninstall*(addon: Addon) =
-  addon.removeAddonFiles(removeAllBackups = true)
+  addon.removeAddonFiles(addon.config.installDir, removeAllBackups = true)
   addon.setAddonState(Removed, &"Removed: {addon.getName()}")
 
 proc pin*(addon: Addon) =
@@ -567,7 +517,7 @@ proc list*(addons: var seq[Addon], sortByTime: bool = false) =
       time = addon.time.format("MM/dd h:mm")
     t.write(1, addon.line, true, colors, style,
       fgBlue, &"{addon.id:<3}",
-      fgWhite, &"{addon.name.alignLeft(nameSpace)}",
+      fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgRed, pin,
       fgGreen, &"{addon.prettyVersion().alignLeft(versionSpace)}",
       fgCyan, &"{kind:<6}",
@@ -596,6 +546,9 @@ proc restore*(addon: Addon) =
   if addon.state != Failed:
     removeFile(backups[1])
 
+proc setOverrideName(addon: Addon) =
+  addon.setAddonState(Renamed, &"{addon.name} renamed to {addon.getName()}")
+
 proc workQueue*(addon: Addon) {.thread.} =
   case addon.action
   of Install: addon.install()
@@ -603,6 +556,7 @@ proc workQueue*(addon: Addon) {.thread.} =
   of Pin:     addon.pin()
   of Unpin:   addon.unpin()
   of Restore: addon.restore()
+  of Name:    addon.setOverrideName()
   else: discard
   if addon.state == Failed:
     addon.state = DoneFailed

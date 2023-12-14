@@ -142,6 +142,7 @@ proc main() =
         of "a", "i":          action = Install; actionCount += 1
         of "u":               action = Update;  actionCount += 1
         of "r":               action = Remove;  actionCount += 1
+        of "n", "name":       action = Name;    actionCount += 1
         of "l", "list":       action = List;    actionCount += 1
         of "c", "config":     action = Setup;   actionCount += 1
         of "h", "help":       action = Help;    actionCount += 1
@@ -155,6 +156,7 @@ proc main() =
         of "l", "list":       action = List;    actionCount += 1
         of "pin":             action = Pin;     actionCount += 1
         of "unpin":           action = Unpin;   actionCount += 1
+        of "name":            action = Name;    actionCount += 1
         of "restore":         action = Restore; actionCount += 1
         of "c", "config":     action = Setup;   actionCount += 1
         of "help":            action = Help;    actionCount += 1
@@ -179,12 +181,12 @@ proc main() =
   case action
   of Install:
     for arg in args:
-      var addon = addonFromUrl(arg)
-      if addon.isSome:
-        var a = addon.get()
-        a.line = line
-        a.action = Install
-        addons.add(a)
+      var opt = addonFromUrl(arg)
+      if opt.isSome:
+        var addon = opt.get
+        addon.line = line
+        addon.action = Install
+        addons.add(addon)
         line += 1
     if addons.len == 0:
       echo "Unable to parse any provided URLs"
@@ -202,18 +204,34 @@ proc main() =
       except:
         continue
     for id in ids:
-      var addon = addonFromId(id)
-      if addon.isSome:
-        var a = addon.get()
-        a.line = line
+      var opt = addonFromId(id)
+      if opt.isSome:
+        var addon = opt.get
+        addon.line = line
         case action
-        of Remove: a.action = Remove
-        of Restore: a.action = Restore
-        of Pin: a.action = Pin
-        of Unpin: a.action = Unpin
+        of Remove:  addon.action = Remove
+        of Restore: addon.action = Restore
+        of Pin:     addon.action = Pin
+        of Unpin:   addon.action = Unpin
         else: discard
-        addons.add(a)
+        addons.add(addon)
         line += 1
+  of Name:
+    var id: int16
+    if args.len != 2:
+      echo "TODO: show help for name overrides"
+      quit()
+    try:
+      id = int16(args[0].parseInt())
+    except:
+      echo "TODO: show help for name overrides"
+      quit()
+    var opt = addonFromId(id)
+    if opt.isSome:
+      let addon = opt.get
+      addon.overrideName = some(args[1])
+      echo &"TODO: overrideName = {args[1]}"
+      addons.add(addon)
   of List:
     addons = configData.addons
     let sortByTime = if "t" in args or "time" in args: true else: false
