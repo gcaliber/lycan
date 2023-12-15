@@ -396,10 +396,13 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
   let client = newHttpClient(headers = headers)
   var response: Response
   while true:
-    response = client.get(url)
-    if response.status.contains("200"):
-      return response
-    else:
+    try:
+      response = client.get(url)
+      if response.status.contains("200"):
+        return response
+      else:
+        retryCount += 1
+    except:
       retryCount += 1
     if retryCount > 4:
       if addon.kind == Github and response.status.contains("404"):
