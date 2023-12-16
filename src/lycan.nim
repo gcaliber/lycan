@@ -39,7 +39,7 @@ proc addonFromUrl(url: string): Option[Addon] =
       let pattern = re"\/mods\/(\d+)\/"
       discard find(cstring(urlmatch[1]), pattern, m, 0, len(urlmatch[1]))
       if m[0] == "":
-        echo &"Unable to determine addon from {url}."
+        echo &"Unable to determine addon from {url}. lycan --help install for more info on curseforge installs."
       else:
         return some(newAddon(m[0], Curse))
     of "github":
@@ -198,6 +198,8 @@ proc main() =
       addon.action = Install
       addons.add(addon)
       line += 1
+    if addons.len == 0:
+      displayHelp()
   of Remove, Restore, Pin, Unpin:
     for arg in args:
       try:
@@ -222,7 +224,8 @@ proc main() =
     try:
       id = int16(args[0].parseInt())
     except:
-      echo "TODO: show help for name overrides 2"
+      echo "Clear name override: lycan -n <id>"
+      echo "  Add name override: lycan -n <id> <new name>"
       quit()
     var opt = addonFromId(id)
     if opt.isSome:
