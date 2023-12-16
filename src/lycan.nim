@@ -265,6 +265,7 @@ proc main() =
   processed &= processMessages()
   thr.joinThreads()
   
+  # we should display the ID of addons being processed and if they didn't have one we can add it here
   for addon in processed:
     if addon.state == DoneFailed:
       failed.add(addon)
