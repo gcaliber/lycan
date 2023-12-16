@@ -1,32 +1,26 @@
 import std/strformat
-import std/locks
 import std/os
 import std/times
 
 import types
 
 var logFile: File
-var logLock: Lock
 var logLevel: LogLevel
 var logChannel*: Channel[LogMessage]
-
 
 proc logInit*(level: LogLevel) =
   logLevel = level
   if level != Off:
     logChannel.open()
-    initLock(logLock)
 
 proc time(): string =
   return now().format("HH:mm:ss'.'fff")
 
 proc writeLog(msg: string) =
   let logFileName = getCurrentDir() / "lycan.log"
-  acquire(logLock)
   logFile = open(logFileName, fmWrite)
   logFile.write(msg)
   logFile.close()
-  release(logLock)
 
 proc log*(msg: string, level: LogLevel = Debug) =
     var loggedMessage: string

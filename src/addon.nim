@@ -3,7 +3,6 @@ import std/colors
 import std/enumerate
 import std/httpclient
 import std/[json, jsonutils]
-import std/locks
 import std/options
 import std/os
 import std/re
@@ -90,7 +89,6 @@ proc stateMessage*(addon: Addon, nameSpace: int) =
     arrow = if addon.old_version.isEmptyOrWhitespace: "" else: "->"
     colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
     style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
-  acquire(stdoutLock)
   case addon.state
   of Checking, Parsing:
     t.write(indent, addon.line, true, colors, style,
@@ -132,7 +130,6 @@ proc stateMessage*(addon: Addon, nameSpace: int) =
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Done, DoneFailed:
     discard
-  release(stdoutLock)
 
 proc setAddonState(addon: Addon, state: AddonState, loggedMsg: string, level: LogLevel = Info) {.gcsafe.} =
   if addon.state != Failed:

@@ -2,12 +2,9 @@ import std/colors
 import std/exitprocs
 import std/terminal
 import std/macros
-import std/locks
 import std/os
 
 import types
-
-var stdoutLock*: Lock
 
 proc moveTo(t: Term, x, y: int, erase: bool) =
   let yOffset = t.y - y
@@ -82,7 +79,6 @@ proc exitTerm(t: Term): proc() =
     showCursor()
 
 proc termInit*(f: File = stdout): Term =
-  initLock(stdoutLock)
   enableTrueColors()
   hideCursor()
   result = new(Term)
@@ -117,6 +113,11 @@ template writeProcessArg(t: Term, colors: tuple[fg: ForegroundColor, bg: Color])
   t.f.setBackgroundColor(bg)
 
 template writeProcessArg(t: Term, colors: tuple[fg: Color, bg: BackgroundColor]) =
+  let (fg, bg) = colors
+  t.f.setForegroundColor(fg)
+  t.f.setBackgroundColor(bg)
+
+template writeProcessArg(t: Term, colors: tuple[fg: ForegroundColor, bg: BackgroundColor]) =
   let (fg, bg) = colors
   t.f.setForegroundColor(fg)
   t.f.setBackgroundColor(bg)
