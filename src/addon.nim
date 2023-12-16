@@ -79,8 +79,8 @@ const LIGHT_GREY: Color = Color(0x34_34_34)
 
 proc getName*(addon: Addon): string =
   if addon.overrideName.isSome: return addon.overrideName.get
-  result = if not addon.name.isEmptyOrWhitespace: addon.name 
-  else: $addon.kind & ':' & addon.project
+  if not addon.name.isEmptyOrWhitespace: return addon.name
+  return $addon.kind & ':' & addon.project
 
 proc stateMessage*(addon: Addon, nameSpace: int) = 
   let 
@@ -256,8 +256,6 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
     discard
   let client = newHttpClient(headers = headers)
   let response = client.get(addon.downloadUrl)
-  if response.isNil:
-    quit()
   if not response.status.contains("200"):
     addon.setAddonState(Failed, &"Bad response downloading {response.status}: {addon.getLatestUrl()}",
     &"{addon.name} download failed. Response code {response.status} from {addon.getLatestUrl()}")
@@ -512,7 +510,8 @@ proc list*(addons: var seq[Addon], sortByTime: bool = false) =
     quit()
   let
     t = configData.term
-    nameSpace = addons[addons.map(a => a.name.len).maxIndex()].name.len + 2
+    m = addons[addons.map(a => (if a.overrideName.isSome: a.overrideName.get.len else: a.name.len)).maxIndex()]
+    nameSpace = (if m.overrideName.isSome: m.overrideName.get.len else: m.name.len) + 2
     versionSpace = addons[addons.map(a => a.version.len).maxIndex()].version.len + 2
   for addon in addons:
     let

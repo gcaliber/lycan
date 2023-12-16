@@ -35,9 +35,9 @@ type
     Unpinned = "Unpinned",
     Removed = "Removed",
     NoBackup = "Not Found"
+    Renamed = "Renamed"
     Done = "Done"
     DoneFailed = "Failed"
-    Renamed = "Renamed"
   
   AddonKind* = enum
     Github, GithubRepo, Gitlab, Tukui, Wowint, Curse

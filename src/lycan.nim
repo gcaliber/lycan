@@ -103,7 +103,8 @@ proc processMessages(): seq[Addon] =
       else:
         addons = addons.filter(a => a != addon)
         addons.add(addon)
-        maxName = addons[addons.map(a => a.name.len).maxIndex()].name.len + 2
+        let m = addons[addons.map(a => (if a.overrideName.isSome: a.overrideName.get.len else: a.name.len)).maxIndex()]
+        maxName = (if m.overrideName.isSome: m.overrideName.get.len else: m.name.len) + 2
         for addon in addons:
           addon.stateMessage(maxName)
     else:
@@ -218,9 +219,6 @@ proc main() =
         line += 1
   of Name:
     var id: int16
-    if args.len != 2:
-      echo "TODO: show help for name overrides"
-      quit()
     try:
       id = int16(args[0].parseInt())
     except:
@@ -229,9 +227,17 @@ proc main() =
     var opt = addonFromId(id)
     if opt.isSome:
       let addon = opt.get
-      addon.overrideName = some(args[1])
-      echo &"TODO: overrideName = {args[1]}"
+      if args.len == 1:
+        addon.overrideName = none(string)
+      elif args.len == 2:
+        addon.overrideName = some(args[1])
+      else:
+        echo "TODO: show help for name overrides"
+        quit()
+      addon.action = Name
       addons.add(addon)
+    else:
+      echo "TODO: show help for name overrides 3"
   of List:
     addons = configData.addons
     let sortByTime = if "t" in args or "time" in args: true else: false
@@ -268,15 +274,14 @@ proc main() =
   failed = processed.filter(a => a.state == DoneFailed)
   success = processed.filter(a => a.state == Done)
 
+  let t = configData.term
   case action
   of Install:
     assignIds(success & configData.addons)
+    # Using sugar here creates code that seg faults. This works fine so seems like a Nim bug to me
+    success.apply(proc(a: Addon) = t.write(1, a.line, false, fgBlue, &"{a.id:<3}", resetStyle))
   else:
     discard
-
-  let t = configData.term
-  # This crashes if we use sugar for the proc, seems like a Nim bug
-  success.apply(proc(a: Addon) = t.write(1, a.line, false, fgBlue, &"{a.id:<3}", resetStyle))
 
   rest = configData.addons.filter(addon => addon notin success)
   final = if action != Remove: success & rest else: rest
