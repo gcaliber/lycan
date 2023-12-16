@@ -224,7 +224,7 @@ proc main() =
     try:
       id = int16(args[0].parseInt())
     except:
-      echo "TODO: show help for name overrides"
+      echo "TODO: show help for name overrides 2"
       quit()
     var opt = addonFromId(id)
     if opt.isSome:
@@ -265,18 +265,18 @@ proc main() =
   processed &= processMessages()
   thr.joinThreads()
   
-  # we should display the ID of addons being processed and if they didn't have one we can add it here
-  for addon in processed:
-    if addon.state == DoneFailed:
-      failed.add(addon)
-    else:
-      success.add(addon)
+  failed = processed.filter(a => a.state == DoneFailed)
+  success = processed.filter(a => a.state == Done)
 
   case action
   of Install:
-    assignIds(success.concat(configData.addons))
+    assignIds(success & configData.addons)
   else:
     discard
+
+  let t = configData.term
+  # This crashes if we use sugar for the proc, seems like a Nim bug
+  success.apply(proc(a: Addon) = t.write(1, a.line, false, fgBlue, &"{a.id:<3}", resetStyle))
 
   rest = configData.addons.filter(addon => addon notin success)
   final = if action != Remove: success & rest else: rest
@@ -284,7 +284,6 @@ proc main() =
   writeAddons(final)
   writeConfig(configData)
 
-  let t = configData.term
   t.write(0, t.yMax, false, "\n")
   for addon in failed:
     t.write(0, t.yMax, false, fgRed, styleBright, &"\nError: ", fgCyan, addon.getName, "\n", resetStyle)

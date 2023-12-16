@@ -85,7 +85,7 @@ proc getName*(addon: Addon): string =
 proc stateMessage*(addon: Addon, nameSpace: int) = 
   let 
     t = configData.term
-    indent = 2
+    indent = 1
     even = addon.line mod 2 == 0
     arrow = if addon.old_version.isEmptyOrWhitespace: "" else: "->"
     colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
@@ -94,41 +94,41 @@ proc stateMessage*(addon: Addon, nameSpace: int) =
   case addon.state
   of Checking, Parsing:
     t.write(indent, addon.line, true, colors, style,
-      fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
+      fgBlue, &"{addon.id:<3}", fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", resetStyle)
   of Downloading, Installing, Restoring:
     t.write(indent, addon.line, true, colors, style,
-      fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
+      fgBlue, &"{addon.id:<3}", fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of FinishedUpdated, FinishedInstalled:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
+      fgBlue, &"{addon.id:<3}", fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of FinishedAlreadyCurrent:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
+      fgBlue, &"{addon.id:<3}", fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyVersion()}", resetStyle)
   of FinishedPinned:
     t.write(indent, addon.line, true, colors, style,
-      fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
+      fgBlue, &"{addon.id:<3}", fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       styleBright, fgRed, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", 
       if addon.version != addon.oldVersion: fgGreen else: fgYellow,
       &"{addon.prettyVersion()}", resetStyle)
   of Removed, Pinned:
     t.write(indent, addon.line, true, colors, style,
-      fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
+      fgBlue, &"{addon.id:<3}", fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Unpinned, Renamed:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
+      fgBlue, &"{addon.id:<3}", fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Restored:
     t.write(indent, addon.line, true, colors, style,
-      fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
+      fgBlue, &"{addon.id:<3}", fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Failed, NoBackup:
     t.write(indent, addon.line, true, colors, style,
-      fgRed, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
+      fgBlue, &"{addon.id:<3}", fgRed, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
   of Done, DoneFailed:
     discard
@@ -256,6 +256,8 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
     discard
   let client = newHttpClient(headers = headers)
   let response = client.get(addon.downloadUrl)
+  if response.isNil:
+    quit()
   if not response.status.contains("200"):
     addon.setAddonState(Failed, &"Bad response downloading {response.status}: {addon.getLatestUrl()}",
     &"{addon.name} download failed. Response code {response.status} from {addon.getLatestUrl()}")
@@ -398,12 +400,16 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
   while true:
     try:
       response = client.get(url)
-      if response.status.contains("200"):
-        return response
-      else:
-        retryCount += 1
-    except:
+    except Exception as e:
+      if retryCount > 4:
+        addon.setAddonState(Failed, &"No response retrieving latest addon info: {addon.getLatestUrl()}",
+        &"{addon.name}: Get latest JSON no response.", e)
+        return
       retryCount += 1
+      sleep(100)
+      continue
+    if response.status.contains("200"):
+      return response
     if retryCount > 4:
       if addon.kind == Github and response.status.contains("404"):
         log(&"{addon.name}: Got {response.status}: {addon.getLatestUrl()} - This usually means no releases are available so switching to trying main/master branch", Warning)
@@ -424,6 +430,7 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
         addon.setAddonState(Failed, &"Bad response retrieving latest addon info - {response.status}: {addon.getLatestUrl()}",
         &"Get latest JSON bad response: {response.status}")
       return
+    retryCount += 1
     sleep(100)
 
 proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
