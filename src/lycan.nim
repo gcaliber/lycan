@@ -39,7 +39,8 @@ proc addonFromUrl(url: string): Option[Addon] =
       let pattern = re"\/mods\/(\d+)\/"
       discard find(cstring(urlmatch[1]), pattern, m, 0, len(urlmatch[1]))
       if m[0] == "":
-        echo &"Unable to determine addon from {url}. lycan --help install for more info on curseforge installs."
+        echo &"Unable to determine addon from {url}."
+        echo &"Make sure you have the corret URL. Go to the addon page, click download, and copy the 'try again' link."
       else:
         return some(newAddon(m[0], Curse))
     of "github":

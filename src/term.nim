@@ -3,6 +3,7 @@ import std/exitprocs
 import std/terminal
 import std/macros
 import std/locks
+import std/os
 
 import types
 

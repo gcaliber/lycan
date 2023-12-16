@@ -56,11 +56,6 @@ proc displayHelp*(option: string = "") =
     t.write(ind4, t.yMax, true, fgWhite, "lycan -l time", "\n")
     t.write(ind4, t.yMax, true, "lycan -lt", "\n")
 
-  of "n", "name":
-    t.write(ind2, t.yMax, true, fgCyan, "-n, --name <id> <name>", "\n\n")
-    t.write(ind2, t.yMax, true, fgWhite, "Set your own <name> for addon with <id>. Must use quotes if <name> contains spaces.\n")
-    t.write(ind2, t.yMax, true, fgWhite, "Leave <name> blank to go back to the default name.\n")
-
   else:
     t.write(ind2, t.yMax, false, fgGreen, "Lycan", fgYellow, " ", version, fgWhite, " by inverimus\n\n", resetStyle)
     t.write(ind2, t.yMax, true, fgCyan, "-a, --add <args>")
