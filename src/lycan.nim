@@ -283,7 +283,7 @@ proc main() =
   of Install:
     assignIds(success & configData.addons)
     # Using sugar here creates code that seg faults. This works fine so seems like a Nim bug to me
-    success.apply(proc(a: Addon) = t.write(1, a.line, false, fgBlue, &"{a.id:<3}", resetStyle))
+    success.apply(proc(a: Addon) = t.write(1, a.line, false, fgCyan, &"{a.id:<3}", resetStyle))
   else:
     discard
 
