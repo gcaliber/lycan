@@ -19,10 +19,13 @@ import types
 import term
 import logger
 
+const DARK_GREY: Color = Color(0x20_20_20)
+const LIGHT_GREY: Color = Color(0x34_34_34)
+
 proc `==`*(a, b: Addon): bool {.inline.} =
   a.project == b.project
 
-proc newAddon*(project: string, kind: AddonKind, branch: Option[string] = none(string), name: string = ""): Addon =
+proc newAddon*(project: string, kind: AddonKind, branch: Option[string] = none(string)): Addon =
   result = new(Addon)
   result.project = project
   result.kind = kind
@@ -61,75 +64,67 @@ proc writeAddons*(addons: var seq[Addon]) =
     except Exception as e:
       log(&"Fatal error writing installed addons file: {configData.addonJsonFile}", Fatal, e)
 
-proc prettyVersion(addon: Addon): string =
-  if addon.version.isEmptyOrWhitespace: return ""
+proc getVersion*(addon: Addon): string =
+  if addon.version.isEmptyOrWhitespace and addon.startVersion.isEmptyOrWhitespace: 
+    return ""
   case addon.kind
-  of GithubRepo: return addon.version[0 ..< 7]
-  else: return addon.version
-
-proc prettyOldVersion(addon: Addon): string =
-  if addon.oldVersion.isEmptyOrWhitespace: return ""
-  case addon.kind
-  of GithubRepo: return addon.oldVersion[0 ..< 7]
-  else: return addon.oldVersion
-
-const DARK_GREY: Color = Color(0x20_20_20)
-const LIGHT_GREY: Color = Color(0x34_34_34)
+  of GithubRepo: 
+    if addon.version.isEmptyOrWhitespace: 
+      return addon.startVersion[0 ..< 7]
+    return addon.version[0 ..< 7]
+  else:
+    if addon.version.isEmptyOrWhitespace: 
+      return addon.startVersion
+    return addon.version
 
 proc getName*(addon: Addon): string =
-  if addon.overrideName.isSome: return addon.overrideName.get
-  if not addon.name.isEmptyOrWhitespace: return addon.name
-  return $addon.kind & ':' & addon.project
+  if addon.overrideName.isSome: 
+    return addon.overrideName.get
+  if addon.name.isEmptyOrWhitespace:
+    return $addon.kind & ':' & addon.project
+  return addon.name
 
-proc stateMessage*(addon: Addon, nameSpace: int) = 
-  let 
+proc stateMessage*(addon: Addon, nameSpace, versionSpace: int) = 
+  case addon.state
+  of Failed, DoneFailed: return
+  else: discard
+
+  let
     t = configData.term
     indent = 1
     even = addon.line mod 2 == 0
-    arrow = if addon.old_version.isEmptyOrWhitespace: "" else: "->"
-    colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
+    colors = if even: (fgWhite, DARK_GREY) else: (fgWhite, LIGHT_GREY)
     style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
-  case addon.state
-  of Checking, Parsing:
-    t.write(indent, addon.line, true, colors, style,
-      fgBlue, &"{addon.id:<3}", fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
-      fgYellow, &"{addon.prettyOldVersion()}", resetStyle)
-  of Downloading, Installing, Restoring:
-    t.write(indent, addon.line, true, colors, style,
-      fgBlue, &"{addon.id:<3}", fgCyan, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
-      fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
-  of FinishedUpdated, FinishedInstalled:
-    t.write(indent, addon.line, true, colors, style,
-      fgBlue, &"{addon.id:<3}", fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
-      fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
-  of FinishedAlreadyCurrent:
-    t.write(indent, addon.line, true, colors, style,
-      fgBlue, &"{addon.id:<3}", fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
-      fgYellow, &"{addon.prettyVersion()}", resetStyle)
-  of FinishedPinned:
-    t.write(indent, addon.line, true, colors, style,
-      fgBlue, &"{addon.id:<3}", fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
-      styleBright, fgRed, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", 
-      if addon.version != addon.oldVersion: fgGreen else: fgYellow,
-      &"{addon.prettyVersion()}", resetStyle)
-  of Removed, Pinned:
-    t.write(indent, addon.line, true, colors, style,
-      fgBlue, &"{addon.id:<3}", fgYellow, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
-      fgGreen, &"{addon.prettyVersion()}", resetStyle)
-  of Unpinned, Renamed:
-    t.write(indent, addon.line, true, colors, style,
-      fgBlue, &"{addon.id:<3}", fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
-      fgGreen, &"{addon.prettyVersion()}", resetStyle)
-  of Restored:
-    t.write(indent, addon.line, true, colors, style,
-      fgBlue, &"{addon.id:<3}", fgGreen, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
-      fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
-  of Failed, NoBackup:
-    t.write(indent, addon.line, true, colors, style,
-      fgBlue, &"{addon.id:<3}", fgRed, &"{$addon.state:<12}", fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
-      fgYellow, &"{addon.prettyOldVersion()}", fgWhite, &"{arrow}", fgGreen, &"{addon.prettyVersion()}", resetStyle)
-  of Done, DoneFailed:
-    discard
+    branch = if addon.branch.isSome: addon.branch.get else: ""
+    
+    kind = case addon.kind
+    of GithubRepo: "Github"
+    else: $addon.kind
+
+    arrow = case addon.state
+    of Downloading, Installing:
+      if addon.startVersion.isEmptyOrWhitespace: "  "
+      else: "↑ "
+    of FinishedUpdated: "↑ "
+    of Restoring: "↓ "
+    else: "  "
+    
+    stateColor = case addon.state
+    of Checking, Parsing, Downloading, Installing, Restoring: fgCyan
+    of FinishedUpdated, FinishedInstalled, FinishedAlreadyCurrent, Pinned, FinishedPinned, Removed, Unpinned, Renamed, Restored: fgGreen
+    of Failed, NoBackup: fgRed
+    else: fgWhite
+
+  t.write(indent, addon.line, true, colors, style,
+    fgBlue, &"{addon.id:<3}", 
+    stateColor, &"{$addon.state:<12}", 
+    fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
+    fgGreen, arrow,
+    fgYellow, &"{addon.getVersion().alignLeft(versionSpace)}",
+    fgCyan, &"{kind:<6}",
+    fgWhite, if addon.branch.isSome: "@" else: "",
+    fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}",
+    resetStyle)
 
 proc setAddonState(addon: Addon, state: AddonState, loggedMsg: string, level: LogLevel = Info) {.gcsafe.} =
   if addon.state != Failed:
@@ -164,7 +159,7 @@ proc setName(addon: Addon, json: JsonNode, name: string = "none") {.gcsafe.} =
 
 proc setVersion(addon: Addon, json: JsonNode) {.gcsafe.} =
   if addon.state == Failed: return
-  addon.old_version = addon.version
+  addon.startVersion = addon.version
   case addon.kind
   of Curse:
     try:
@@ -468,7 +463,7 @@ proc install*(addon: Addon) {.gcsafe.} =
   if addon.pinned:
     addon.setAddonState(FinishedPinned, &"Finished: {addon.getName()} not updated, pinned to version {addon.version}")
     return
-  if addon.version != addon.oldVersion:
+  if addon.version != addon.startVersion:
     addon.time = now()
     addon.setDownloadUrl(json)
     addon.setName(json)
@@ -478,10 +473,10 @@ proc install*(addon: Addon) {.gcsafe.} =
     addon.unzip()
     addon.createBackup()
     addon.moveDirs()
-    if addon.oldVersion.isEmptyOrWhitespace:
+    if addon.startVersion.isEmptyOrWhitespace:
       addon.setAddonState(FinishedInstalled, &"Installed: {addon.getName()} installed at version {addon.version}")
     else:
-      addon.setAddonState(FinishedUpdated, &"Updated: {addon.getName()} updated from {addon.oldVersion} to {addon.version}")
+      addon.setAddonState(FinishedUpdated, &"Updated: {addon.getName()} updated from {addon.startVersion} to {addon.version}")
   else:
     addon.setAddonState(FinishedAlreadyCurrent, &"Finished: {addon.getName()} already up to date.")
 
@@ -509,7 +504,7 @@ proc list*(addons: var seq[Addon], sortByTime: bool = false) =
     t = configData.term
     m = addons[addons.map(a => (if a.overrideName.isSome: a.overrideName.get.len else: a.name.len)).maxIndex()]
     nameSpace = (if m.overrideName.isSome: m.overrideName.get.len else: m.name.len) + 2
-    versionSpace = addons[addons.map(a => a.version.len).maxIndex()].version.len + 2
+    versionSpace = addons[addons.map(a => a.getVersion().len).maxIndex()].getVersion().len + 2
   for addon in addons:
     let
       even = addon.line mod 2 == 0
@@ -518,14 +513,14 @@ proc list*(addons: var seq[Addon], sortByTime: bool = false) =
       kind = case addon.kind 
         of GithubRepo: "Github"
         else: $addon.kind      
-      pin = if addon.pinned: "!" else: ""
-      branch = if addon.branch.isSome: addon.branch.get() else: ""
+      pin = if addon.pinned: "!" else: " "
+      branch = if addon.branch.isSome: addon.branch.get else: ""
       time = addon.time.format("MM/dd h:mm")
     t.write(1, addon.line, true, colors, style,
       fgBlue, &"{addon.id:<3}",
       fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
       fgRed, pin,
-      fgGreen, &"{addon.prettyVersion().alignLeft(versionSpace)}",
+      fgGreen, &"{addon.getVersion().alignLeft(versionSpace)}",
       fgCyan, &"{kind:<6}",
       fgWhite, if addon.branch.isSome: "@" else: "",
       fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}",
@@ -543,7 +538,7 @@ proc restore*(addon: Addon) =
   let filename = backups[0]
   let start = filename.find("&V=") + 3
   addon.filename = filename
-  addon.oldVersion = addon.version
+  addon.startVersion = addon.version
   addon.version = filename[start .. ^5] #exclude .zip
   addon.time = getFileInfo(filename).creationTime.local()
   addon.unzip()

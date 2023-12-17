@@ -69,7 +69,7 @@ type
     overrideName*: Option[string]
     kind*: AddonKind
     version*: string
-    oldVersion*: string
+    startVersion*: string
     id*: int16
     dirs*: seq[string]
     downloadUrl*: string

@@ -94,6 +94,7 @@ proc setup(args: seq[string]) =
 
 proc processMessages(): seq[Addon] =
   var maxName {.global.} = 0
+  var maxVersion {.global.} = 0
   var addons {.global.}: seq[Addon]
   while true:
     let (ok, addon) = addonChannel.tryRecv()
@@ -104,10 +105,10 @@ proc processMessages(): seq[Addon] =
       else:
         addons = addons.filter(a => a != addon)
         addons.add(addon)
-        let m = addons[addons.map(a => (if a.overrideName.isSome: a.overrideName.get.len else: a.name.len)).maxIndex()]
-        maxName = (if m.overrideName.isSome: m.overrideName.get.len else: m.name.len) + 2
+        maxName = addons[addons.map(a => a.getName().len).maxIndex()].getName().len + 2
+        maxVersion = addons[addons.map(a => a.getVersion().len).maxIndex()].getVersion().len + 2
         for addon in addons:
-          addon.stateMessage(maxName)
+          addon.stateMessage(maxName, maxVersion)
     else:
       break
 
@@ -283,7 +284,7 @@ proc main() =
   of Install:
     assignIds(success & configData.addons)
     # Using sugar here creates code that seg faults. This works fine so seems like a Nim bug to me
-    success.apply(proc(a: Addon) = t.write(1, a.line, false, fgCyan, &"{a.id:<3}", resetStyle))
+    success.apply(proc(a: Addon) = t.write(1, a.line, false, fgBlue, &"{a.id:<3}", resetStyle))
   else:
     discard
 
