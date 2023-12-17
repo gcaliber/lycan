@@ -180,6 +180,13 @@ proc setVersion(addon: Addon, json: JsonNode) {.gcsafe.} =
   of Wowint:
     addon.version = json[0]["UIVersion"].getStr()
 
+proc invalidKeywords(addon: Addon): Regex {.gcsafe.} =
+  case addon.config.mode
+  of Retail: result = re"wrath|tbc|classic|vanilla"
+  of Vanilla: result = re"retail|mainline|wrath|tbc"
+  of Classic: result = re"retail|mainline|vanilla"
+  of None: discard
+
 proc getLatestUrl(addon: Addon): string {.gcsafe.} =
   case addon.kind
   of Curse:
@@ -203,7 +210,18 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) {.gcsafe.} =
     let id = $json["id"].getInt()
     addon.downloadUrl = &"https://www.curseforge.com/api/v1/mods/{addon.project}/files/{id}/download"
   of Github:
-    addon.downloadUrl = json["zipball_url"].getStr()
+    let assets = json["assets"]
+    if len(assets) != 0:
+      for asset in assets:
+        if asset["content_type"].getStr() != "application/zip":
+          continue
+        let name = asset["name"].getStr().toLower()
+        if not name.contains(addon.invalidKeywords()):
+          addon.downloadUrl = asset["browser_download_url"].getStr()
+          return
+      addon.downloadUrl = json["zipball_url"].getStr()
+    else:
+      addon.downloadUrl = json["zipball_url"].getStr()
   of GithubRepo:
     addon.downloadUrl = &"https://www.github.com/{addon.project}/archive/refs/heads/{addon.branch.get}.zip"
   of Gitlab:
