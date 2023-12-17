@@ -225,9 +225,9 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) {.gcsafe.} =
   of GithubRepo:
     addon.downloadUrl = &"https://www.github.com/{addon.project}/archive/refs/heads/{addon.branch.get}.zip"
   of Gitlab:
-    for s in json[0]["assets"]["sources"]:
-      if s["format"].getStr() == "zip":
-        addon.downloadUrl = s["url"].getStr()
+    for source in json[0]["assets"]["sources"]:
+      if source["format"].getStr() == "zip":
+        addon.downloadUrl = source["url"].getStr()
   of Tukui:
     addon.downloadUrl = json["url"].getStr()
   of Wowint:
@@ -243,11 +243,26 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   else:
     discard
   let client = newHttpClient(headers = headers)
-  let response = client.get(addon.downloadUrl)
-  if not response.status.contains("200"):
-    addon.setAddonState(Failed, &"Bad response downloading {response.status}: {addon.getLatestUrl()}",
-    &"{addon.name} download failed. Response code {response.status} from {addon.getLatestUrl()}")
-    return
+  var response: Response
+  var retryCount = 0
+  while true:
+    try:
+      response = client.get(addon.downloadUrl)
+    except Exception as e:
+      if retryCount > 4:
+        addon.setAddonState(Failed, &"Error while trying to download: {addon.getLatestUrl()}",
+          &"{addon.getName()}: download failed for {addon.getLatestUrl()}", e)
+        return
+      retryCount += 1
+      sleep(100)
+    if response.status.contains("200"):
+      break
+    if retryCount > 4:
+      addon.setAddonState(Failed, &"Bad response downloading {response.status}: {addon.getLatestUrl()}",
+        &"{addon.name} download failed. Response code {response.status} from {addon.getLatestUrl()}")
+      return
+    retryCount += 1
+    sleep(100)
   var downloadName: string
   case addon.kind:
   of Curse:
