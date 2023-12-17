@@ -227,7 +227,7 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) {.gcsafe.} =
     else:
       addon.downloadUrl = json["zipball_url"].getStr()
   of GithubRepo:
-    addon.downloadUrl = &"https://www.github.com/{addon.project}/archive/refs/heads/{addon.branch.get()}.zip"
+    addon.downloadUrl = &"https://www.github.com/{addon.project}/archive/refs/heads/{addon.branch.get}.zip"
   of Gitlab:
     for s in json[0]["assets"]["sources"]:
       if s["format"].getStr() == "zip":
