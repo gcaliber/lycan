@@ -180,17 +180,6 @@ proc setVersion(addon: Addon, json: JsonNode) {.gcsafe.} =
   of Wowint:
     addon.version = json[0]["UIVersion"].getStr()
 
-proc getInvalidModeStrings(addon: Addon): seq[string] {.gcsafe.} =
-  case addon.config.mode
-  of Retail:
-    result = @["bcc", "tbc", "wotlk", "wotlkc", "Classic", "classic"]
-  of Vanilla:
-    result = @["mainline", "bcc", "tbc", "wotlk", "wotlkc", "Classic"]
-  of Classic:
-    result = @["mainline", "bcc", "tbc", "classic"]
-  of None:
-    discard
-
 proc getLatestUrl(addon: Addon): string {.gcsafe.} =
   case addon.kind
   of Curse:
@@ -214,18 +203,7 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) {.gcsafe.} =
     let id = $json["id"].getInt()
     addon.downloadUrl = &"https://www.curseforge.com/api/v1/mods/{addon.project}/files/{id}/download"
   of Github:
-    let assets = json["assets"]
-    if len(assets) != 0:
-      let invalid = getInvalidModeStrings(addon)
-      for asset in assets:
-        if asset["content_type"].getStr() == "application/json":
-          continue
-        let lc = asset["name"].getStr().toLower()
-        let ignore = invalid.filter(s => lc.contains(s))
-        if len(ignore) == 0:
-          addon.downloadUrl = asset["browser_download_url"].getStr()
-    else:
-      addon.downloadUrl = json["zipball_url"].getStr()
+    addon.downloadUrl = json["zipball_url"].getStr()
   of GithubRepo:
     addon.downloadUrl = &"https://www.github.com/{addon.project}/archive/refs/heads/{addon.branch.get}.zip"
   of Gitlab:
