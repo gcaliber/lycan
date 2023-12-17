@@ -9,6 +9,7 @@
 
 # https://www.wowinterface.com/downloads/info22095.html
 
+import std/algorithm
 import std/enumerate
 import std/options
 import std/[os, parseopt]
@@ -17,6 +18,7 @@ import std/sequtils
 import std/[strformat, strutils]
 import std/sugar
 import std/terminal
+import std/times
 
 import addon
 import config
@@ -245,8 +247,9 @@ proc main() =
       echo "TODO: show help for name overrides 3"
   of List:
     addons = configData.addons
-    let sortByTime = if "t" in args or "time" in args: true else: false
-    addons.list(sortByTime)
+    if "t" in args or "time" in args:
+      addons.sort((a, z) => int(a.time < z.time))
+    addons.list()
   of Setup:
     setup(args)
   of Help:

@@ -27,7 +27,7 @@ type
     FinishedInstalled = "Installed",
     FinishedUpdated = "Updated",
     FinishedPinned = "Pinned",
-    FinishedAlreadyCurrent = "Up-to-Date",
+    FinishedUpToDate = "Up-to-Date",
     Failed = "Failed",
     Restoring = "Restoring",
     Restored = "Restored",

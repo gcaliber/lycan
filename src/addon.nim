@@ -111,7 +111,7 @@ proc stateMessage*(addon: Addon, nameSpace, versionSpace: int) =
     
     stateColor = case addon.state
     of Checking, Parsing, Downloading, Installing, Restoring: fgCyan
-    of FinishedUpdated, FinishedInstalled, FinishedAlreadyCurrent, Pinned, FinishedPinned, Removed, Unpinned, Renamed, Restored: fgGreen
+    of FinishedUpdated, FinishedInstalled, FinishedUpToDate, Pinned, FinishedPinned, Removed, Unpinned, Renamed, Restored: fgGreen
     of Failed, NoBackup: fgRed
     else: fgWhite
 
@@ -478,7 +478,7 @@ proc install*(addon: Addon) {.gcsafe.} =
     else:
       addon.setAddonState(FinishedUpdated, &"Updated: {addon.getName()} updated from {addon.startVersion} to {addon.version}")
   else:
-    addon.setAddonState(FinishedAlreadyCurrent, &"Finished: {addon.getName()} already up to date.")
+    addon.setAddonState(FinishedUpToDate, &"Finished: {addon.getName()} already up to date.")
 
 proc uninstall*(addon: Addon) =
   addon.removeAddonFiles(addon.config.installDir, removeAllBackups = true)
@@ -492,9 +492,7 @@ proc unpin*(addon: Addon) =
   addon.pinned = false
   addon.setAddonState(Unpinned, &"Unpinned: {addon.getName()}")
 
-proc list*(addons: var seq[Addon], sortByTime: bool = false) =
-  if sortByTime:
-    addons.sort((a, z) => int(a.time < z.time))
+proc list*(addons: seq[Addon]) =
   for line, addon in enumerate(addons):
     addon.line = line
   if addons.len == 0:
