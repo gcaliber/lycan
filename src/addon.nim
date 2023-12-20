@@ -115,11 +115,11 @@ proc stateMessage*(addon: Addon, nameSpace, versionSpace: int) =
   t.write(indent, addon.line, true, colors, style,
     fgBlue, &"{addon.id:<3}", 
     stateColor, &"{$addon.state:<12}", 
-    fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
-    versionColor, &"{addon.getVersion().alignLeft(versionSpace)}",
-    fgCyan, &"{kind:<6}",
-    fgWhite, if addon.branch.isSome: "@" else: "",
-    fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}",
+    fgWhite, &"{addon.getName().alignLeft(nameSpace)}", 
+    versionColor, &"{addon.getVersion().alignLeft(versionSpace)}", 
+    fgCyan, &"{kind:<6}", 
+    fgWhite, if addon.branch.isSome: "@" else: "", 
+    fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}", 
     resetStyle)
 
 proc setAddonState(addon: Addon, state: AddonState, loggedMsg: string, level: LogLevel = Info) {.gcsafe.} =
@@ -251,6 +251,7 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
         return
       retryCount += 1
       sleep(100)
+      continue
     if response.status.contains("200"):
       break
     if retryCount > 4:
@@ -287,7 +288,7 @@ proc tocDir(path: string): bool {.gcsafe.} =
       var (dir, name, ext) = splitFile(file)
       if ext == ".toc":
         if name != lastPathPart(dir):
-          let p = re("(.+?)(?:$|[-_](?i:mainline|classic|wrath|tbc|bcc))", flags = {reIgnoreCase})
+          let p = re("(.+?)(?:$|[-_](?i:mainline|classic|vanilla|classic_era|wrath|tbc|bcc))", flags = {reIgnoreCase})
           var m: array[2, string]
           discard find(cstring(name), p, m, 0, len(name))
           name = m[0]
