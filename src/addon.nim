@@ -101,26 +101,22 @@ proc stateMessage*(addon: Addon, nameSpace, versionSpace: int) =
     of GithubRepo: "Github"
     else: $addon.kind
 
-    arrow = case addon.state
-    of Downloading, Installing:
-      if addon.startVersion.isEmptyOrWhitespace: "  "
-      else: "↑ "
-    of FinishedUpdated: "↑ "
-    of Restoring: "↓ "
-    else: "  "
-    
     stateColor = case addon.state
     of Checking, Parsing, Downloading, Installing, Restoring: fgCyan
     of FinishedUpdated, FinishedInstalled, FinishedUpToDate, Pinned, FinishedPinned, Removed, Unpinned, Renamed, Restored: fgGreen
     of Failed, NoBackup: fgRed
     else: fgWhite
 
+    versionColor = case addon.state
+    of Checking, Parsing, Downloading, Installing, Restoring, FinishedUpToDate, Pinned, FinishedPinned, Unpinned, Renamed, Failed, NoBackup: fgYellow
+    of FinishedUpdated, FinishedInstalled, Removed, Restored: fgGreen
+    else: fgWhite
+
   t.write(indent, addon.line, true, colors, style,
     fgBlue, &"{addon.id:<3}", 
     stateColor, &"{$addon.state:<12}", 
     fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
-    fgGreen, arrow,
-    fgYellow, &"{addon.getVersion().alignLeft(versionSpace)}",
+    versionColor, &"{addon.getVersion().alignLeft(versionSpace)}",
     fgCyan, &"{kind:<6}",
     fgWhite, if addon.branch.isSome: "@" else: "",
     fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}",
