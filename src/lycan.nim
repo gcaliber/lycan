@@ -185,8 +185,17 @@ proc main() =
     ids: seq[int16]
   case action
   of Install:
-    for arg in args:
-      var opt = addonFromUrl(arg)
+    var urls: seq[string]
+    var f: File
+    if f.open(args[0]):
+      while true:
+        try: urls.add(f.readline())
+        except: break
+      f.close()
+    else:
+      urls = args
+    for url in urls:
+      var opt = addonFromUrl(url)
       if opt.isSome:
         var addon = opt.get
         addon.line = line
