@@ -18,27 +18,27 @@ proc time(): string =
 
 proc writeLog(msg: string) =
   let logFileName = getCurrentDir() / "lycan.log"
-  logFile = open(logFileName, fmWrite)
+  logFile = open(logFileName, fmAppend)
   logFile.write(msg)
   logFile.close()
 
 proc log*(msg: string, level: LogLevel = Debug) =
-    var loggedMessage: string
-    case logLevel:
-    of Debug, Fatal, Warning, Info:
-      loggedMessage = &"[{time()}]:[{$level}] {msg}\n"
-    of Off, None: discard
-    writeLog(loggedMessage)
+  var loggedMessage: string
+  case logLevel:
+  of Debug, Fatal, Warning, Info:
+    loggedMessage = &"[{time()}]:[{$level}] {msg}\n"
+  of Off, None: discard
+  writeLog(loggedMessage)
 
 proc log*(msg: string, level: LogLevel, e: ref Exception) =
-    var loggedMessage: string
-    case logLevel:
-    of Debug:
-      loggedMessage = &"[{time()}]:[{$level}]\n{e.name}: {e.msg}\n{e.getStackTrace()}\n"
-    of Fatal, Warning, Info:
-      loggedMessage = &"[{time()}]:[{$level}] {e.name}: {e.msg}\n"
-    of Off, None: discard
-    writeLog(loggedMessage)
+  var loggedMessage: string
+  case logLevel:
+  of Debug:
+    loggedMessage = &"[{time()}]:[{$level}]\n{e.name}: {e.msg}\n{e.getStackTrace()}\n"
+  of Fatal, Warning, Info:
+    loggedMessage = &"[{time()}]:[{$level}] {e.name}: {e.msg}\n"
+  of Off, None: discard
+  writeLog(loggedMessage)
 
 proc log*(logMessage: LogMessage) =
   if logMessage.e.isNil:
