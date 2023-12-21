@@ -83,4 +83,3 @@ proc stateMessage*(addon: Addon, nameSpace, versionSpace: int) =
       fgWhite, if addon.branch.isSome: "@" else: "", 
       fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}", 
       resetStyle)
-

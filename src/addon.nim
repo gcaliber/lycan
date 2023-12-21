@@ -8,7 +8,6 @@ import std/re
 import std/sequtils
 import std/[strformat, strutils]
 import std/sugar
-# import std/terminal
 import std/times
 
 import zippy/ziparchives
@@ -195,7 +194,7 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
       break
     if retryCount > 4:
       addon.setAddonState(Failed, &"Bad response downloading {response.status}: {addon.getLatestUrl()}",
-        &"{addon.name} download failed. Response code {response.status} from {addon.getLatestUrl()}")
+        &"{addon.getName()} download failed. Response code {response.status} from {addon.getLatestUrl()}")
       return
     retryCount += 1
     sleep(100)
@@ -240,7 +239,7 @@ proc getAddonDirs(addon: Addon): seq[string] {.gcsafe.} =
   var firstPass = true
   while true:
     if not tocDir(current):
-      log(&"{addon.name}: extractDir contains no toc files, collecting subdirectories")
+      log(&"{addon.getName()}: extractDir contains no toc files, collecting subdirectories")
       let subdirs = collect(for kind, dir in walkDir(current): (if kind == pcDir: dir))
       assert len(subdirs) != 0 
       current = subdirs[0]
@@ -290,8 +289,8 @@ proc moveDirs(addon: Addon) {.gcsafe.} =
     try:
       moveDir(dir, destination)
     except Exception as e:
-      addon.setAddonState(Failed, "Problem moving Addon directories.", &"{addon.name} move directories error", e)
-  log(&"{addon.name}: Files moved to install directory.", Info)
+      addon.setAddonState(Failed, "Problem moving Addon directories.", &"{addon.getName()} move directories error", e)
+  log(&"{addon.getName()}: Files moved to install directory.", Info)
 
 proc createBackup(addon: Addon) {.gcsafe.} =
   if addon.state == Failed: return
@@ -304,9 +303,9 @@ proc createBackup(addon: Addon) {.gcsafe.} =
     removeFile(backups[0])
   try:
     moveFile(addon.filename, addon.config.backupDir / name)
-    log(&"{addon.name}: Backup created {addon.config.backupDir / name}", Info)
+    log(&"{addon.getName()}: Backup created {addon.config.backupDir / name}", Info)
   except Exception as e:
-    addon.setAddonState(Failed, "Problem creating backup files.", &"{addon.name}: create backup error", e)
+    addon.setAddonState(Failed, "Problem creating backup files.", &"{addon.getName()}: create backup error", e)
     discard
 
 proc unzip(addon: Addon) {.gcsafe.} =
@@ -316,9 +315,9 @@ proc unzip(addon: Addon) {.gcsafe.} =
   removeDir(addon.extractDir)
   try:
     extractAll(addon.filename, addon.extractDir)
-    log(&"{addon.name}: Extracted {addon.filename}", Info)
+    log(&"{addon.getName()}: Extracted {addon.filename}", Info)
   except Exception as e:
-    addon.setAddonState(Failed, "Problem unzipping files.", &"{addon.name}: unzip error", e)
+    addon.setAddonState(Failed, "Problem unzipping files.", &"{addon.getName()}: unzip error", e)
     discard
 
 proc getLatest(addon: Addon): Response {.gcsafe.} =
@@ -340,7 +339,7 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
     except Exception as e:
       if retryCount > 4:
         addon.setAddonState(Failed, &"No response retrieving latest addon info: {addon.getLatestUrl()}",
-        &"{addon.name}: Get latest JSON no response.", e)
+        &"{addon.getName()}: Get latest JSON no response.", e)
         return
       retryCount += 1
       sleep(100)
@@ -349,7 +348,7 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
       return response
     if retryCount > 4:
       if addon.kind == Github and response.status.contains("404"):
-        log(&"{addon.name}: Got {response.status}: {addon.getLatestUrl()} - This usually means no releases are available so switching to trying main/master branch", Warning)
+        log(&"{addon.getName()}: Got {response.status}: {addon.getLatestUrl()} - This usually means no releases are available so switching to trying main/master branch", Warning)
         let resp = client.get(&"https://api.github.com/repos/{addon.project}/branches")
         let branches = parseJson(resp.body)
         let names = collect(for item in branches: item["name"].getStr())
@@ -358,7 +357,7 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
         elif names.contains("main"):
           addon.branch = some("main")
         else:
-          log(&"{addon.name}: No branch named master or main avaialable", Warning)
+          log(&"{addon.getName()}: No branch named master or main avaialable", Warning)
           addon.setAddonState(Failed, &"Bad response retrieving latest addon info - {response.status}: {addon.getLatestUrl()}",
           &"Get latest JSON bad response: {response.status}")
         addon.kind = GithubRepo
@@ -377,7 +376,7 @@ proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
   try:
     json = parseJson(response.body)
   except Exception as e:
-    addon.setAddonState(Failed, "JSON parsing error.", &"JSON Error: {addon.name} Unable to parse json.", e)
+    addon.setAddonState(Failed, "JSON parsing error.", &"JSON Error: {addon.getName()} Unable to parse json.", e)
   case addon.kind:
   of Curse:
     var gameVersions: seq[string]
@@ -392,12 +391,12 @@ proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
         if num.startsWith(gameVersionNumber):
           return json["data"][i]
     addon.setAddonState(Failed, &"JSON Error: No game version matches current mode of {addon.config.mode}.",
-    &"JSON Error: {addon.name} no game version matches current mode of {addon.config.mode}.")
+    &"JSON Error: {addon.getName()} no game version matches current mode of {addon.config.mode}.")
   of Tukui:
     for data in json:
       if data["slug"].getStr() == addon.project:
         return data
-    addon.setAddonState(Failed, "JSON Error: Addon not found.", &"JSON Error: {addon.name} not found.")
+    addon.setAddonState(Failed, "JSON Error: Addon not found.", &"JSON Error: {addon.getName()} not found.")
     return
   else:
     discard
