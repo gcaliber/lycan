@@ -145,17 +145,14 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) {.gcsafe.} =
     addon.downloadUrl = &"https://www.curseforge.com/api/v1/mods/{addon.project}/files/{id}/download"
   of Github:
     let assets = json["assets"]
-    if len(assets) != 0:
-      for asset in assets:
-        if asset["content_type"].getStr() != "application/zip":
-          continue
-        let name = asset["name"].getStr().toLower()
-        if not name.contains(addon.invalidKeywords()):
-          addon.downloadUrl = asset["browser_download_url"].getStr()
-          return
-      addon.downloadUrl = json["zipball_url"].getStr()
-    else:
-      addon.downloadUrl = json["zipball_url"].getStr()
+    for asset in assets:
+      if asset["content_type"].getStr() != "application/zip":
+        continue
+      let name = asset["name"].getStr().toLower()
+      if not name.contains(addon.invalidKeywords()):
+        addon.downloadUrl = asset["browser_download_url"].getStr()
+        return
+    addon.downloadUrl = json["zipball_url"].getStr()
   of GithubRepo:
     addon.downloadUrl = &"https://www.github.com/{addon.project}/archive/refs/heads/{addon.branch.get}.zip"
   of Gitlab:
