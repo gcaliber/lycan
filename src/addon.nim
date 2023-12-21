@@ -60,6 +60,37 @@ proc writeAddons*(addons: var seq[Addon]) =
     except Exception as e:
       log(&"Fatal error writing installed addons file: {configData.addonJsonFile}", Fatal, e)
 
+
+proc setAddonState(addon: Addon, state: AddonState) {.gcsafe.} =
+  if addon.state != Failed:
+    addon.state = state
+  let loggedMsg = case state
+  of Checking: &"{addon.getName()}: Retrieving latest JSON"
+  of Parsing: &"{addon.getName()}: Parsing latest JSON"
+  of Downloading: &"{addon.getName()}: Downloading latest release"
+  of Installing: &"{addon.getName()}: Installing"
+  of FinishedInstalled: &"{addon.getName()}: Finished install"
+  of FinishedUpdated: &"{addon.getName()}: Finished installing update"
+  of FinishedPinned: &"{addon.getName()}: Addon pinned, no update requested"
+  of FinishedUpToDate: &"{addon.getName()}: Finished, already up to date"
+  of Restoring: &"{addon.getName()}: Restoring to {addon.getVersion()}"
+  of Restored: &"{addon.getName()}: Finished, restored to {addon.getVersion()}"
+  of Pinned: &"{addon.getName()}: Addon pinned to version {addon.getVersion()}"
+  of Unpinned: &"{addon.getName()}: Addon unpinned, next request will update if needed"
+  of Removed: &"{addon.getName()}: Addon removed"
+  of NoBackup: &"{addon.getName()}: Restoring error, addon has no backups to restore"
+  of Renamed: &"{addon.name} renamed to {addon.getName()}"
+  else: ""
+  if not loggedMsg.isEmptyOrWhitespace:
+    logChannel.send(
+      LogMessage(
+        level: Info, 
+        msg: loggedMsg, 
+        e: nil
+      )
+    )
+  addonChannel.send(addon.deepCopy())
+
 proc setAddonState(addon: Addon, state: AddonState, loggedMsg: string, level: LogLevel = Info) {.gcsafe.} =
   if addon.state != Failed:
     addon.state = state
@@ -165,12 +196,12 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) {.gcsafe.} =
 proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   if addon.state == Failed: return
   var headers = newHttpHeaders()
-  case addon.kind
-  of Github, GithubRepo:
-    if addon.config.githubToken != "":
+  if addon.config.githubToken != "":
+    case addon.kind
+    of Github, GithubRepo:
       headers["Authorization"] = &"Bearer {addon.config.githubToken}"
-  else:
-    discard
+    else:
+      discard
   let client = newHttpClient(headers = headers)
   var response: Response
   var retryCount = 0
@@ -319,12 +350,12 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
   addon.setAddonState(Checking, &"Checking: {addon.getName()} getting latest version information")
   let url = addon.getLatestUrl()
   var headers = newHttpHeaders()
-  case addon.kind
-  of Github, GithubRepo:
-    if addon.config.githubToken != "":
+  if addon.config.githubToken != "":
+    case addon.kind
+    of Github, GithubRepo:
       headers["Authorization"] = &"Bearer {addon.config.githubToken}"
-  else:
-    discard
+    else:
+      discard
   var retryCount = 0
   let client = newHttpClient(headers = headers)
   var response: Response
@@ -399,39 +430,39 @@ proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
 
 proc install*(addon: Addon) {.gcsafe.} =
   let json = addon.getLatestJson()
-  addon.setAddonState(Parsing, &"Parsing: {addon.getName()} JSON for latest version")
+  addon.setAddonState(Parsing)
   addon.setVersion(json)
   if addon.pinned:
-    addon.setAddonState(FinishedPinned, &"Finished: {addon.getName()} not updated, pinned to version {addon.version}")
+    addon.setAddonState(FinishedPinned)
     return
   if addon.version != addon.startVersion:
     addon.time = now()
     addon.setDownloadUrl(json)
     addon.setName(json)
-    addon.setAddonState(Downloading, &"Downloading: {addon.getName()}")
+    addon.setAddonState(Downloading)
     addon.download(json)
-    addon.setAddonState(Installing, &"Installing: {addon.getName()}")
+    addon.setAddonState(Installing)
     addon.unzip()
     addon.createBackup()
     addon.moveDirs()
     if addon.startVersion.isEmptyOrWhitespace:
-      addon.setAddonState(FinishedInstalled, &"Installed: {addon.getName()} installed at version {addon.version}")
+      addon.setAddonState(FinishedInstalled)
     else:
-      addon.setAddonState(FinishedUpdated, &"Updated: {addon.getName()} updated from {addon.startVersion} to {addon.version}")
+      addon.setAddonState(FinishedUpdated)
   else:
-    addon.setAddonState(FinishedUpToDate, &"Finished: {addon.getName()} already up to date.")
+    addon.setAddonState(FinishedUpToDate)
 
 proc uninstall*(addon: Addon) =
   addon.removeAddonFiles(addon.config.installDir, removeAllBackups = true)
-  addon.setAddonState(Removed, &"Removed: {addon.getName()}")
+  addon.setAddonState(Removed)
 
 proc pin*(addon: Addon) =
   addon.pinned = true
-  addon.setAddonState(Pinned, &"Pinned: {addon.getName()} pinned to version {addon.version}")
+  addon.setAddonState(Pinned)
 
 proc unpin*(addon: Addon) =
   addon.pinned = false
-  addon.setAddonState(Unpinned, &"Unpinned: {addon.getName()}")
+  addon.setAddonState(Unpinned)
 
 proc list*(addons: seq[Addon]) =
   if addons.len == 0:
@@ -450,10 +481,10 @@ proc list*(addons: seq[Addon]) =
   quit()
 
 proc restore*(addon: Addon) =
-  addon.setAddonState(Restoring, &"Restoring: {addon.getName()}")
+  addon.setAddonState(Restoring)
   var backups = getBackupFiles(addon)
   if len(backups) < 2:
-    addon.setAddonState(NoBackup, &"Restoring Error: {addon.getName()} has no backups to restore")
+    addon.setAddonState(NoBackup)
     return
   let filename = backups[0]
   let start = filename.find("&V=") + 3
@@ -463,12 +494,12 @@ proc restore*(addon: Addon) =
   addon.time = getFileInfo(filename).creationTime.local()
   addon.unzip()
   addon.moveDirs()
-  addon.setAddonState(Restored, &"Restore Finished: {addon.getName()}")
+  addon.setAddonState(Restored)
   if addon.state != Failed:
     removeFile(backups[1])
 
 proc setOverrideName(addon: Addon) =
-  addon.setAddonState(Renamed, &"{addon.name} renamed to {addon.getName()}")
+  addon.setAddonState(Renamed)
 
 proc workQueue*(addon: Addon) {.thread.} =
   case addon.action
