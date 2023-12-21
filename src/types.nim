@@ -38,6 +38,7 @@ type
     Renamed = "Renamed"
     Done = "Done"
     DoneFailed = "Failed"
+    List = "List"
   
   AddonKind* = enum
     Github, GithubRepo, Gitlab, Tukui, Wowint, Curse

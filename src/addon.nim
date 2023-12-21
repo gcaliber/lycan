@@ -1,5 +1,4 @@
 import std/algorithm
-import std/colors
 import std/enumerate
 import std/httpclient
 import std/[json, jsonutils]
@@ -9,7 +8,7 @@ import std/re
 import std/sequtils
 import std/[strformat, strutils]
 import std/sugar
-import std/terminal
+# import std/terminal
 import std/times
 
 import zippy/ziparchives
@@ -18,9 +17,7 @@ import config
 import types
 import term
 import logger
-
-const DARK_GREY: Color = Color(0x20_20_20)
-const LIGHT_GREY: Color = Color(0x34_34_34)
+import messages
 
 proc `==`*(a, b: Addon): bool {.inline.} =
   a.project.toLower() == b.project.toLower()
@@ -63,64 +60,6 @@ proc writeAddons*(addons: var seq[Addon]) =
       log(&"Installed addons file saved: {configData.addonJsonFile}", Info)
     except Exception as e:
       log(&"Fatal error writing installed addons file: {configData.addonJsonFile}", Fatal, e)
-
-proc getVersion*(addon: Addon): string =
-  if addon.version.isEmptyOrWhitespace and addon.startVersion.isEmptyOrWhitespace: 
-    return ""
-  case addon.kind
-  of GithubRepo: 
-    if addon.version.isEmptyOrWhitespace: 
-      return addon.startVersion[0 ..< 7]
-    return addon.version[0 ..< 7]
-  else:
-    if addon.version.isEmptyOrWhitespace: 
-      return addon.startVersion
-    return addon.version
-
-proc getName*(addon: Addon): string =
-  if addon.overrideName.isSome: 
-    return addon.overrideName.get
-  if addon.name.isEmptyOrWhitespace:
-    return $addon.kind & ':' & addon.project
-  return addon.name
-
-proc stateMessage*(addon: Addon, nameSpace, versionSpace: int) = 
-  case addon.state
-  of Failed, DoneFailed: return
-  else: discard
-
-  let
-    t = configData.term
-    indent = 1
-    even = addon.line mod 2 == 0
-    colors = if even: (fgWhite, DARK_GREY) else: (fgWhite, LIGHT_GREY)
-    style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
-    branch = if addon.branch.isSome: addon.branch.get else: ""
-    
-    kind = case addon.kind
-    of GithubRepo: "Github"
-    else: $addon.kind
-
-    stateColor = case addon.state
-    of Checking, Parsing, Downloading, Installing, Restoring: fgCyan
-    of FinishedUpdated, FinishedInstalled, FinishedUpToDate, Pinned, FinishedPinned, Removed, Unpinned, Renamed, Restored: fgGreen
-    of Failed, NoBackup: fgRed
-    else: fgWhite
-
-    versionColor = case addon.state
-    of Checking, Parsing, Downloading, Installing, Restoring, FinishedUpToDate, Pinned, FinishedPinned, Unpinned, Renamed, Failed, NoBackup: fgYellow
-    of FinishedUpdated, FinishedInstalled, Removed, Restored: fgGreen
-    else: fgWhite
-
-  t.write(indent, addon.line, true, colors, style,
-    fgBlue, &"{addon.id:<3}", 
-    stateColor, &"{$addon.state:<12}", 
-    fgWhite, &"{addon.getName().alignLeft(nameSpace)}", 
-    versionColor, &"{addon.getVersion().alignLeft(versionSpace)}", 
-    fgCyan, &"{kind:<6}", 
-    fgWhite, if addon.branch.isSome: "@" else: "", 
-    fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}", 
-    resetStyle)
 
 proc setAddonState(addon: Addon, state: AddonState, loggedMsg: string, level: LogLevel = Info) {.gcsafe.} =
   if addon.state != Failed:
@@ -501,37 +440,18 @@ proc unpin*(addon: Addon) =
   addon.setAddonState(Unpinned, &"Unpinned: {addon.getName()}")
 
 proc list*(addons: seq[Addon]) =
-  for line, addon in enumerate(addons):
-    addon.line = line
   if addons.len == 0:
     echo "No addons installed"
     quit()
-  let
+  for line, addon in enumerate(addons):
+    addon.state = List
+    addon.line = line
+  let 
     t = configData.term
-    m = addons[addons.map(a => (if a.overrideName.isSome: a.overrideName.get.len else: a.name.len)).maxIndex()]
-    nameSpace = (if m.overrideName.isSome: m.overrideName.get.len else: m.name.len) + 2
+    nameSpace = addons[addons.map(a => a.getName().len).maxIndex()].getName().len + 2
     versionSpace = addons[addons.map(a => a.getVersion().len).maxIndex()].getVersion().len + 2
   for addon in addons:
-    let
-      even = addon.line mod 2 == 0
-      colors = if even: (fgDefault, DARK_GREY) else: (fgDefault, LIGHT_GREY)
-      style = if not t.trueColor: (if even: styleBright else: styleReverse) else: styleBright
-      kind = case addon.kind 
-        of GithubRepo: "Github"
-        else: $addon.kind      
-      pin = if addon.pinned: "!" else: " "
-      branch = if addon.branch.isSome: addon.branch.get else: ""
-      time = addon.time.format("MM/dd h:mm")
-    t.write(1, addon.line, true, colors, style,
-      fgBlue, &"{addon.id:<3}",
-      fgWhite, &"{addon.getName().alignLeft(nameSpace)}",
-      fgRed, pin,
-      fgGreen, &"{addon.getVersion().alignLeft(versionSpace)}",
-      fgCyan, &"{kind:<6}",
-      fgWhite, if addon.branch.isSome: "@" else: "",
-      fgBlue, if addon.branch.isSome: &"{branch:<11}" else: &"{branch:<12}",
-      fgWhite, &"{time}",
-      resetStyle)
+    addon.stateMessage(nameSpace, versionSpace)
   t.write(0, t.yMax, false, "\n")
   quit()
 

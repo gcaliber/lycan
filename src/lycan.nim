@@ -28,6 +28,7 @@ import help
 import term
 import types
 import logger
+import messages
 
 const pollRate = 20
 
