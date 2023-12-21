@@ -74,7 +74,6 @@ proc setAddonState(addon: Addon, state: AddonState, errorMsg: string, loggedMsg:
 
 proc setName(addon: Addon, json: JsonNode, name: string = "none") {.gcsafe.} =
   if addon.state == Failed: return
-  if addon.overrideName.isSome: addon.name = addon.overrideName.get
   case addon.kind
   of Curse:
     addon.name = json["fileName"].getStr().split('-')[0]
