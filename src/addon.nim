@@ -87,8 +87,6 @@ proc setName(addon: Addon, json: JsonNode, name: string = "none") {.gcsafe.} =
     addon.name = json["name"].getStr()
   of Wowint:
     addon.name = json[0]["UIName"].getStr()
-  if addon.name.len > 34:
-    addon.name = addon.name[0 .. 33]
 
 proc setVersion(addon: Addon, json: JsonNode) {.gcsafe.} =
   if addon.state == Failed: return
