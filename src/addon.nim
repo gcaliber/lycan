@@ -94,8 +94,9 @@ proc setVersion(addon: Addon, json: JsonNode) {.gcsafe.} =
   case addon.kind
   of Curse:
     try:
-      # Some addons seem to use this as a version string while others exclude it
       addon.version = json["displayName"].getStr()
+      if addon.version.endsWith(".zip"):
+        addon.version = json["dateModified"].getStr()  
     except KeyError:
       addon.version = json["dateModified"].getStr()
   of Github:
