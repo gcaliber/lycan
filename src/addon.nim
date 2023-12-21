@@ -213,7 +213,7 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
       break
     if retryCount > 4:
       addon.setAddonState(Failed, &"Bad response downloading {response.status}: {addon.getLatestUrl()}",
-        &"{addon.getName()} download failed. Response code {response.status} from {addon.getLatestUrl()}")
+        &"{addon.getName()}: download failed. Response code {response.status} from {addon.getLatestUrl()}")
       return
     retryCount += 1
     sleep(100)
@@ -231,12 +231,12 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   try:
     file = open(addon.filename, fmWrite)
   except Exception as e:
-    addon.setAddonState(Failed, &"Problem opening file {addon.filename}", &"download failed, error opening file {addon.filename}", e)
+    addon.setAddonState(Failed, &"Problem opening file {addon.filename}", &"{addon.getName()}: download failed, error opening file {addon.filename}", e)
     return
   try:
     system.write(file, response.body)
   except Exception as e:
-    addon.setAddonState(Failed, &"Problem encountered while downloading.", &"download failed, error writing {addon.filename}", e)
+    addon.setAddonState(Failed, &"Problem encountered while downloading.", &"{addon.getName()}: download failed, error writing {addon.filename}", e)
   file.close()
 
 proc tocDir(path: string): bool {.gcsafe.} =
@@ -308,7 +308,7 @@ proc moveDirs(addon: Addon) {.gcsafe.} =
     try:
       moveDir(dir, destination)
     except Exception as e:
-      addon.setAddonState(Failed, "Problem moving Addon directories.", &"{addon.getName()} move directories error", e)
+      addon.setAddonState(Failed, "Problem moving Addon directories.", &"{addon.getName()}: move directories error", e)
   log(&"{addon.getName()}: Files moved to install directory.", Info)
 
 proc createBackup(addon: Addon) {.gcsafe.} =
@@ -378,12 +378,12 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
         else:
           log(&"{addon.getName()}: No branch named master or main avaialable", Warning)
           addon.setAddonState(Failed, &"Bad response retrieving latest addon info - {response.status}: {addon.getLatestUrl()}",
-          &"Get latest JSON bad response: {response.status}")
+          &"{addon.getName()}: Get latest JSON bad response: {response.status}")
         addon.kind = GithubRepo
         return addon.getLatest()
       else:
         addon.setAddonState(Failed, &"Bad response retrieving latest addon info - {response.status}: {addon.getLatestUrl()}",
-        &"Get latest JSON bad response: {response.status}")
+        &"{addon.getName()}: Get latest JSON bad response: {response.status}")
       return
     retryCount += 1
     sleep(100)
@@ -395,7 +395,7 @@ proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
   try:
     json = parseJson(response.body)
   except Exception as e:
-    addon.setAddonState(Failed, "JSON parsing error.", &"JSON Error: {addon.getName()} Unable to parse json.", e)
+    addon.setAddonState(Failed, "JSON parsing error.", &"{addon.getName()}: JSON parsing error", e)
   case addon.kind:
   of Curse:
     var gameVersions: seq[string]
@@ -410,12 +410,12 @@ proc getLatestJson(addon: Addon): JsonNode {.gcsafe.} =
         if num.startsWith(gameVersionNumber):
           return json["data"][i]
     addon.setAddonState(Failed, &"JSON Error: No game version matches current mode of {addon.config.mode}.",
-    &"JSON Error: {addon.getName()} no game version matches current mode of {addon.config.mode}.")
+    &"JSON Error: {addon.getName()}: no game version matches current mode of {addon.config.mode}.")
   of Tukui:
     for data in json:
       if data["slug"].getStr() == addon.project:
         return data
-    addon.setAddonState(Failed, "JSON Error: Addon not found.", &"JSON Error: {addon.getName()} not found.")
+    addon.setAddonState(Failed, "JSON Error: Addon not found.", &"{addon.getName()}: JSON error, addon not found.")
     return
   else:
     discard
