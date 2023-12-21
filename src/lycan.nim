@@ -45,7 +45,7 @@ proc validId(id: string, kind: AddonKind): bool =
     if not found == -1:
       return true
   else:
-    return false
+    discard
   return false
 
 proc addonFromUrl(url: string): Option[Addon] =
