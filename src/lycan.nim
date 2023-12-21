@@ -263,7 +263,7 @@ proc main() =
         addons.add(addon)
         line += 1
     if addons.len == 0:
-      echo "Unable to parse any provided URLs"
+      echo "Error: Unable to parse any addons."
       quit()
   of Update, Empty:
     for addon in configData.addons:
