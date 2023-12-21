@@ -1,13 +1,15 @@
-# https://github.com/Stanzilla/AdvancedInterfaceOptions
-# https://github.com/Tercioo/Plater-Nameplates/tree/master
-# https://gitlab.com/woblight/actionmirroringframe
-# https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
+#[
+https://github.com/Stanzilla/AdvancedInterfaceOptions
+https://github.com/Tercioo/Plater-Nameplates/tree/master
+https://gitlab.com/woblight/actionmirroringframe
+https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
+https://www.tukui.org/elvui
+https://www.curseforge.com/api/v1/mods/1592/files/4963354/download
+]#
 
-# https://www.tukui.org/elvui https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/woblight/actionmirroringframe https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
-
-# https://github.com/Tercioo/Plater-Nameplates/tree/master https://www.tukui.org/elvui https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html https://gitlab.com/woblight/actionmirroringframe
-
-# https://www.wowinterface.com/downloads/info22095.html
+#[
+https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/woblight/actionmirroringframe https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html https://www.tukui.org/elvui https://www.curseforge.com/api/v1/mods/1592/files/4963354/download
+]#
 
 import std/algorithm
 import std/enumerate
