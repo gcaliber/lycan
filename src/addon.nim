@@ -23,7 +23,7 @@ const DARK_GREY: Color = Color(0x20_20_20)
 const LIGHT_GREY: Color = Color(0x34_34_34)
 
 proc `==`*(a, b: Addon): bool {.inline.} =
-  a.project == b.project
+  a.project.toLower() == b.project.toLower()
 
 proc newAddon*(project: string, kind: AddonKind, branch: Option[string] = none(string)): Addon =
   result = new(Addon)

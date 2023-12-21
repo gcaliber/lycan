@@ -32,7 +32,7 @@ const pollRate = 20
 proc addonFromUrl(url: string): Option[Addon] =
   var urlmatch: array[2, string]
   let pattern = re"^(?:https?://)?(?:www\.)?(.+)\.(?:com|org)/(.+[^/\n])"
-  var found = find(cstring(url), pattern, urlmatch, 0, len(url))
+  let found = find(cstring(url), pattern, urlmatch, 0, len(url))
   if found == -1 or urlmatch[1] == "":
     echo &"Unable to determine addon from {url}."
   case urlmatch[0].toLower()
@@ -65,6 +65,66 @@ proc addonFromUrl(url: string): Option[Addon] =
     else:
       discard
   return none(Addon)
+
+proc validId(id: string, kind: AddonKind): bool =
+  case kind
+  of Curse, Wowint:
+    return id.all(isDigit)
+  of Tukui:
+    return id == "tukui" or id == "elvui"
+  of Github, Gitlab:
+    var match: array[2, string]
+    let pattern = re"^[^\/]*\/[^\/]*$"
+    let found = find(cstring(id), pattern, match, 0, len(id))
+    if not found == -1:
+      return true
+  else:
+    return false
+  return false
+
+proc addonFromProject(s: string): Option[Addon] =
+  var match: array[2, string]
+  let pattern = re"^([^:]+):(.*)$"
+  let found = find(cstring(s), pattern, match, 0, len(s))
+  if found == -1:
+    echo &"Unable to determine addon from {s}."
+    return none(Addon)
+  let source = match[0].toLower()
+  let id = match[1].toLower()
+  case source
+  of "curse": 
+    if validId(id, Curse):
+      return some(newAddon(id, Curse))
+  of "wowint":
+    if validId(id, Wowint):
+      return some(newAddon(id, Wowint))
+  of "tukui":
+    if validId(id, Tukui):
+      return some(newAddon(id, Tukui))
+  of "gitlab":
+    if validId(id, Gitlab):
+      return some(newAddon(id, Gitlab))
+  of "github":
+    if validId(id, Github):
+      var match: array[2, string]
+      let pattern = re"^(.+?)(?:@(.+))?$"
+      discard find(cstring(id), pattern, match, 0, len(id))
+      if match[1] == "":
+        return some(newAddon(id, Github))
+      else:
+        return some(newAddon(match[0], GithubRepo, branch = some(match[1])))
+  else: 
+    discard
+  return none(Addon)
+
+proc parseAddon(s: string): Option[Addon] =
+  var match: array[2, string]
+  let pattern = re"^(?:https?:\/\/)?(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+.*[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?"
+  let found = find(cstring(s), pattern, match, 0, len(s))
+  if found == -1:
+    return addonFromProject(s)
+  else:
+    return addonFromUrl(s)
 
 proc addonFromId(id: int16): Option[Addon] =
   for a in configData.addons:
@@ -185,17 +245,17 @@ proc main() =
     ids: seq[int16]
   case action
   of Install:
-    var urls: seq[string]
+    var addonStrings: seq[string]
     var f: File
     if f.open(args[0]):
       while true:
-        try: urls.add(f.readline())
+        try: addonStrings.add(f.readline())
         except: break
       f.close()
     else:
-      urls = args
-    for url in urls:
-      var opt = addonFromUrl(url)
+      addonStrings = args
+    for str in addonStrings:
+      var opt = parseAddon(str)
       if opt.isSome:
         var addon = opt.get
         addon.line = line
