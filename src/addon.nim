@@ -215,7 +215,7 @@ proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
     system.write(file, response.body)
   except Exception as e:
     addon.setAddonState(Failed, &"Problem encountered while downloading.", &"download failed, error writing {addon.filename}", e)
-  close(file)
+  file.close()
 
 proc tocDir(path: string): bool {.gcsafe.} =
   for kind, file in walkDir(path):
