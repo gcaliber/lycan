@@ -51,7 +51,7 @@ proc toJsonHook*(a: Addon): JsonNode =
   result["time"] = %a.time.format("yyyy-MM-dd'T'HH:mm")
 
 proc writeAddons*(addons: var seq[Addon]) =
-  if configData.addonJsonFile != "":
+  if not configData.addonJsonFile.isEmptyOrWhitespace:
     addons.sort((a, z) => int(a.name.toLower() > z.name.toLower()))
     let addonsJson = addons.toJson(ToJsonOptions(enumMode: joptEnumString, jsonNodeMode: joptJsonNodeAsRef))
     try:
@@ -60,35 +60,28 @@ proc writeAddons*(addons: var seq[Addon]) =
     except Exception as e:
       log(&"Fatal error writing installed addons file: {configData.addonJsonFile}", Fatal, e)
 
-
 proc setAddonState(addon: Addon, state: AddonState) {.gcsafe.} =
   if addon.state != Failed:
     addon.state = state
   let loggedMsg = case state
-  of Checking: &"{addon.getName()}: Retrieving latest JSON"
-  of Parsing: &"{addon.getName()}: Parsing latest JSON"
-  of Downloading: &"{addon.getName()}: Downloading latest release"
-  of Installing: &"{addon.getName()}: Installing"
+  of Checking:          &"{addon.getName()}: Retrieving latest JSON"
+  of Parsing:           &"{addon.getName()}: Parsing latest JSON"
+  of Downloading:       &"{addon.getName()}: Downloading latest release"
+  of Installing:        &"{addon.getName()}: Installing"
   of FinishedInstalled: &"{addon.getName()}: Finished install"
-  of FinishedUpdated: &"{addon.getName()}: Finished installing update"
-  of FinishedPinned: &"{addon.getName()}: Addon pinned, no update requested"
-  of FinishedUpToDate: &"{addon.getName()}: Finished, already up to date"
-  of Restoring: &"{addon.getName()}: Restoring to {addon.getVersion()}"
-  of Restored: &"{addon.getName()}: Finished, restored to {addon.getVersion()}"
-  of Pinned: &"{addon.getName()}: Addon pinned to version {addon.getVersion()}"
-  of Unpinned: &"{addon.getName()}: Addon unpinned, next request will update if needed"
-  of Removed: &"{addon.getName()}: Addon removed"
-  of NoBackup: &"{addon.getName()}: Restoring error, addon has no backups to restore"
-  of Renamed: &"{addon.name} renamed to {addon.getName()}"
+  of FinishedUpdated:   &"{addon.getName()}: Finished installing update"
+  of FinishedPinned:    &"{addon.getName()}: Addon pinned, no update requested"
+  of FinishedUpToDate:  &"{addon.getName()}: Finished, already up to date"
+  of Restoring:         &"{addon.getName()}: Restoring to {addon.getVersion()}"
+  of Restored:          &"{addon.getName()}: Finished restore to {addon.getVersion()}"
+  of Pinned:            &"{addon.getName()}: Addon pinned to version {addon.getVersion()}"
+  of Unpinned:          &"{addon.getName()}: Addon unpinned, next request will update if needed"
+  of Removed:           &"{addon.getName()}: Addon removed"
+  of NoBackup:          &"{addon.getName()}: Restoring error, addon has no backups to restore"
+  of Renamed:           &"{addon.name}: renamed to {addon.getName()}"
   else: ""
   if not loggedMsg.isEmptyOrWhitespace:
-    logChannel.send(
-      LogMessage(
-        level: Info, 
-        msg: loggedMsg, 
-        e: nil
-      )
-    )
+    logChannel.send(LogMessage(level: Info, msg: loggedMsg, e: nil))
   addonChannel.send(addon.deepCopy())
 
 proc setAddonState(addon: Addon, state: AddonState, loggedMsg: string, level: LogLevel = Info) {.gcsafe.} =
@@ -132,12 +125,12 @@ proc setVersion(addon: Addon, json: JsonNode) {.gcsafe.} =
       addon.version = json["dateModified"].getStr()
   of Github:
     let v = json["tag_name"].getStr()
-    addon.version = if v != "": v else: json["name"].getStr()
+    addon.version = if not v.isEmptyOrWhitespace: v else: json["name"].getStr()
   of GithubRepo:
     addon.version = json["sha"].getStr()
   of Gitlab:
     let v = json[0]["tag_name"].getStr()
-    addon.version = if v != "": v else: json[0]["name"].getStr()
+    addon.version = if not v.isEmptyOrWhitespace: v else: json[0]["name"].getStr()
   of Tukui:
     addon.version = json["version"].getStr()
   of Wowint:
@@ -196,7 +189,7 @@ proc setDownloadUrl(addon: Addon, json: JsonNode) {.gcsafe.} =
 proc download(addon: Addon, json: JsonNode) {.gcsafe.} =
   if addon.state == Failed: return
   var headers = newHttpHeaders()
-  if addon.config.githubToken != "":
+  if not addon.config.githubToken.isEmptyOrWhitespace:
     case addon.kind
     of Github, GithubRepo:
       headers["Authorization"] = &"Bearer {addon.config.githubToken}"
@@ -350,7 +343,7 @@ proc getLatest(addon: Addon): Response {.gcsafe.} =
   addon.setAddonState(Checking, &"Checking: {addon.getName()} getting latest version information")
   let url = addon.getLatestUrl()
   var headers = newHttpHeaders()
-  if addon.config.githubToken != "":
+  if not addon.config.githubToken.isEmptyOrWhitespace:
     case addon.kind
     of Github, GithubRepo:
       headers["Authorization"] = &"Bearer {addon.config.githubToken}"
