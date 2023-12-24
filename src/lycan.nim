@@ -210,15 +210,15 @@ proc main() =
     of cmdShortOption, cmdLongOption:
       if val == "":
         case key:
-        of "a", "i":          action = Install; actionCount += 1
-        of "e", "export":     action = Export;  actionCount += 1
-        of "u", "update":     action = Update;  actionCount += 1
-        of "r":               action = Remove;  actionCount += 1
-        of "n", "name":       action = Name;    actionCount += 1
-        of "l", "list":       action = List;    actionCount += 1
-        of "c", "config":     action = Setup;   actionCount += 1
-        of "h", "help":       action = Help;    actionCount += 1
-        of "reinstall":       discard # TODO: allow reinstalling of all installed addons, this effectively imports from a backed up lycan_addons.json
+        of "a", "i":          action = Install;   actionCount += 1
+        of "e", "export":     action = Export;    actionCount += 1
+        of "u", "update":     action = Update;    actionCount += 1
+        of "r":               action = Remove;    actionCount += 1
+        of "n", "name":       action = Name;      actionCount += 1
+        of "l", "list":       action = List;      actionCount += 1
+        of "c", "config":     action = Setup;     actionCount += 1
+        of "h", "help":       action = Help;      actionCount += 1
+        of "reinstall":       action = Reinstall; actionCount += 1
         else: displayHelp()
       else:
         args.add(val)
@@ -272,10 +272,10 @@ proc main() =
     if addons.len == 0:
       echo "Error: Unable to parse any addons."
       quit()
-  of Update, Empty:
+  of Update, Empty, Reinstall:
     for addon in configData.addons:
       addon.line = line
-      addon.action = Install
+      addon.action = if action == Reinstall: Reinstall else: Install
       addons.add(addon)
       line += 1
     if addons.len == 0:
@@ -326,14 +326,19 @@ proc main() =
       addons.sort((a, z) => int(a.time < z.time))
     addons.list()
   of Export:
-    let f = open("exported_addons", fmWrite)
+    let filename = getCurrentDir() / "exported_addons"
+    let f = open(filename, fmWrite)
     for addon in configData.addons:
-      var name = &"{addon.kind}:{addon.project}"
+      let kind = case addon.kind
+      of GithubRepo: "Github"
+      else: $addon.kind
+      var exportName = &"{kind}:{addon.project}"
       if addon.branch.isSome:
-        name &= &"@{addon.branch.get}"
-      f.writeLine(name)
+        exportName &= &"@{addon.branch.get}"
+      echo &"Exported {addon.getName()}:  {exportName}"
+      f.writeLine(exportName)
     f.close()
-    echo &"Exported {configData.addons.len} addons."
+    echo &"Wrote {configData.addons.len} addons to {filename}"
     quit()
   of Setup:
     setup(args)

@@ -428,7 +428,7 @@ proc install*(addon: Addon) {.gcsafe.} =
   if addon.pinned:
     addon.setAddonState(FinishedPinned)
     return
-  if addon.version != addon.startVersion:
+  if addon.action == Reinstall or addon.version != addon.startVersion:
     addon.time = now()
     addon.setDownloadUrl(json)
     addon.setName(json)
@@ -438,7 +438,7 @@ proc install*(addon: Addon) {.gcsafe.} =
     addon.unzip()
     addon.createBackup()
     addon.moveDirs()
-    if addon.startVersion.isEmptyOrWhitespace:
+    if addon.action == Reinstall or addon.startVersion.isEmptyOrWhitespace:
       addon.setAddonState(FinishedInstalled)
     else:
       addon.setAddonState(FinishedUpdated)
@@ -496,12 +496,18 @@ proc setOverrideName(addon: Addon) =
 
 proc workQueue*(addon: Addon) {.thread.} =
   case addon.action
-  of Install: addon.install()
-  of Remove:  addon.uninstall()
-  of Pin:     addon.pin()
-  of Unpin:   addon.unpin()
-  of Restore: addon.restore()
-  of Name:    addon.setOverrideName()
+  of Install, Reinstall: 
+    addon.install()
+  of Remove: 
+    addon.uninstall()
+  of Pin:
+    addon.pin()
+  of Unpin:
+    addon.unpin()
+  of Restore:
+    addon.restore()
+  of Name:
+    addon.setOverrideName()
   else: discard
   if addon.state == Failed:
     addon.state = DoneFailed

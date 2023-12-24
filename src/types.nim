@@ -3,7 +3,7 @@ import std/times
 
 type
   Action* = enum
-    Install, Update, Remove, List, Pin, Unpin, Restore, Setup, Empty, Help, Name, Export
+    Install, Update, Remove, List, Pin, Unpin, Restore, Setup, Empty, Help, Name, Export, Reinstall
 
   LogLevel* = enum
     Off = "OFF",
