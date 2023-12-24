@@ -376,8 +376,7 @@ proc main() =
   case action
   of Install:
     assignIds(success & configData.addons)
-    # Using sugar here creates code that seg faults. This works fine so seems like a Nim bug to me
-    success.apply(proc(a: Addon) = t.write(1, a.line, false, fgBlue, &"{a.id:<3}", resetStyle))
+    success.apply((a: Addon) => t.write(1, a.line, false, fgBlue, &"{a.id:<3}", resetStyle))
   else:
     discard
 
@@ -389,7 +388,7 @@ proc main() =
 
   t.write(0, t.yMax, false, "\n")
   for addon in failed:
-    t.write(0, t.yMax, false, fgRed, styleBright, &"\nError: ", fgCyan, addon.getName, "\n", resetStyle)
+    t.write(0, t.yMax, false, fgRed, styleBright, &"\nError: ", fgCyan, addon.getName(), "\n", resetStyle)
     t.write(4, t.yMax, false, fgWhite, addon.errorMsg, "\n", resetStyle)
 
 main()
