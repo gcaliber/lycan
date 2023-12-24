@@ -270,7 +270,7 @@ proc main() =
         addons.add(addon)
         line += 1
     if addons.len == 0:
-      echo "Error: Unable to parse any addons."
+      echo "  Error: Unable to parse any addons to install."
       quit()
   of Update, Empty, Reinstall:
     for addon in configData.addons:
@@ -304,8 +304,8 @@ proc main() =
     try:
       id = int16(args[0].parseInt())
     except:
-      echo "Clear name override: lycan -n <id>"
-      echo "  Add name override: lycan -n <id> <new name>"
+      echo "  Add name override:   lycan -n <id> <new name>"
+      echo "  Clear name override: lycan -n <id>"
       quit()
     var opt = addonFromId(id)
     if opt.isSome:
@@ -319,7 +319,7 @@ proc main() =
       addon.action = Name
       addons.add(addon)
     else:
-      echo &"No installed addon has id {id}"
+      echo &"  No installed addon has id {id}"
   of List:
     addons = configData.addons
     if "t" in args or "time" in args:
@@ -335,10 +335,10 @@ proc main() =
       var exportName = &"{kind}:{addon.project}"
       if addon.branch.isSome:
         exportName &= &"@{addon.branch.get}"
-      echo &"Exported {addon.getName()}:  {exportName}"
+      echo &"  Exported {addon.getName()}:  {exportName}"
       f.writeLine(exportName)
     f.close()
-    echo &"Wrote {configData.addons.len} addons to {filename}"
+    echo &"    Wrote {configData.addons.len} addons to {filename}"
     quit()
   of Setup:
     setup(args)
