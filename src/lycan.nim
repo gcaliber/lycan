@@ -218,6 +218,7 @@ proc main() =
         of "l", "list":       action = List;    actionCount += 1
         of "c", "config":     action = Setup;   actionCount += 1
         of "h", "help":       action = Help;    actionCount += 1
+        of "reinstall":       discard # TODO: allow reinstalling of all installed addons, this effectively imports from a backed up lycan_addons.json
         else: displayHelp()
       else:
         args.add(val)
@@ -314,12 +315,11 @@ proc main() =
       elif args.len == 2:
         addon.overrideName = some(args[1])
       else:
-        echo "TODO: show help for name overrides"
-        quit()
+        displayHelp()
       addon.action = Name
       addons.add(addon)
     else:
-      echo "TODO: show help for name overrides 3"
+      echo &"No installed addon has id {id}"
   of List:
     addons = configData.addons
     if "t" in args or "time" in args:
