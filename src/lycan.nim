@@ -5,9 +5,7 @@ https://gitlab.com/woblight/actionmirroringframe
 https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html
 https://www.tukui.org/elvui
 https://www.curseforge.com/api/v1/mods/1592/files/4963354/download
-]#
 
-#[
 https://github.com/Stanzilla/AdvancedInterfaceOptions https://github.com/Tercioo/Plater-Nameplates/tree/master https://gitlab.com/woblight/actionmirroringframe https://www.wowinterface.com/downloads/info24608-HekiliPriorityHelper.html https://www.tukui.org/elvui https://www.curseforge.com/api/v1/mods/1592/files/4963354/download
 ]#
 
@@ -200,8 +198,8 @@ proc main() =
   logInit(configData.logLevel)
   var opt = initOptParser(
     commandLineParams(), 
-    shortNoVal = {'u', 'i', 'a'}, 
-    longNoVal = @["update"]
+    shortNoVal = {'u', 'i', 'a', 'e'}, 
+    longNoVal = @["update", "export"]
   )
   var
     action = Empty
@@ -213,7 +211,8 @@ proc main() =
       if val == "":
         case key:
         of "a", "i":          action = Install; actionCount += 1
-        of "u":               action = Update;  actionCount += 1
+        of "e", "export":     action = Export;  actionCount += 1
+        of "u", "update":     action = Update;  actionCount += 1
         of "r":               action = Remove;  actionCount += 1
         of "n", "name":       action = Name;    actionCount += 1
         of "l", "list":       action = List;    actionCount += 1
@@ -224,7 +223,6 @@ proc main() =
         args.add(val)
         case key:
         of "add", "install":  action = Install; actionCount += 1
-        of "update":          action = Update;  actionCount += 1
         of "r", "remove":     action = Remove;  actionCount += 1
         of "l", "list":       action = List;    actionCount += 1
         of "pin":             action = Pin;     actionCount += 1
@@ -327,6 +325,16 @@ proc main() =
     if "t" in args or "time" in args:
       addons.sort((a, z) => int(a.time < z.time))
     addons.list()
+  of Export:
+    let f = open("exported_addons", fmWrite)
+    for addon in configData.addons:
+      var name = &"{addon.kind}:{addon.project}"
+      if addon.branch.isSome:
+        name &= &"@{addon.branch.get}"
+      f.writeLine(name)
+    f.close()
+    echo &"Exported {configData.addons.len} addons."
+    quit()
   of Setup:
     setup(args)
   of Help:
